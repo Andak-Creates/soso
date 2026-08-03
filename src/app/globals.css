@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-brand {
+    font-family: var(--font-brand), serif;
+  }
+}
+
+
+@theme {
+  /* ===== SOSO DESIGN TOKENS ===== */
+
+  /* Brand Colors */
+  --color-primary: #7c3aed;
+  --color-primary-hover: #6d28d9;
+  --color-primary-light: #f5f0ff;
+  --color-primary-border: #ddd6fe;
+  --color-accent: #9333ea;
+
+  /* Semantic Colors */
+  --color-success: #059669;
+  --color-success-light: #ecfdf5;
+  --color-warning: #d97706;
+  --color-warning-light: #fffbeb;
+  --color-danger: #dc2626;
+  --color-danger-light: #fef2f2;
+
+  /* Neutral Surface */
+  --color-bg-body: #f4f6fa;
+  --color-bg-card: #ffffff;
+  --color-bg-subtle: #f1f5f9;
+  --color-border: #e2e8f0;
+
+  /* Text */
+  --color-text-main: #0f172a;
+  --color-text-muted: #64748b;
+  --color-text-subtle: #94a3b8;
+
+  /* Typography */
+  --font-heading: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04);
+  --shadow-hover: 0 12px 40px rgba(124,58,237,0.14);
+}
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: #f4f6fa;
+    color: #0f172a;
+    font-family: 'Inter', -apple-system, sans-serif;
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 99px;
+  }
+}
