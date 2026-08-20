@@ -41,10 +41,10 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single();
 
-  // Fetch their parties with media and ticket counts
+  // Fetch their parties with media and tier capacities (we only need quantity, not stale quantity_sold)
   const { data: parties } = await supabase
     .from('parties')
-    .select('*, media:party_media(*), ticket_tiers(quantity_sold, quantity)')
+    .select('*, media:party_media(*), ticket_tiers(quantity)')
     .eq('host_id', user.id)
     .order('created_at', { ascending: false });
 
@@ -57,7 +57,8 @@ export default async function DashboardPage() {
     const { data: allTickets } = await supabase
       .from('tickets')
       .select('party_id, quantity_purchased')
-      .in('party_id', partyIds);
+      .in('party_id', partyIds)
+      .eq('payment_status', 'completed');
 
     if (allTickets && allTickets.length > 0) {
       allTickets.forEach(t => {

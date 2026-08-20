@@ -59,11 +59,12 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     { data: hostAdmins },
     { data: earningsLogs },
   ] = await Promise.all([
-    // Tickets with guest profile info — use guest_name/guest_email as fallback for non-registered guests
+    // Tickets with guest profile info — only completed payments; excludes failed/pending Paystack attempts
     supabase
       .from('tickets')
       .select('*, profiles(id, username, full_name, avatar_url)')
       .eq('party_id', eventId)
+      .eq('payment_status', 'completed')
       .order('purchased_at', { ascending: false }),
 
     // Ticket tiers for this event

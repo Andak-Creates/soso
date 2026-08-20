@@ -194,6 +194,9 @@ export default function EventClient({
   const [updatingPublish, setUpdatingPublish] = useState(false);
 
   const [allTiers, setAllTiers] = useState<any[]>(ticketTiers || []);
+  // localTickets mirrors the server-rendered tickets prop but also receives
+  // concierge inserts in real-time so ticket counts stay accurate without a full reload.
+  const [localTickets, setLocalTickets] = useState<any[]>(tickets || []);
   const [showAddTierModal, setShowAddTierModal] = useState(false);
 
   const [newTierForm, setNewTierForm] = useState({
@@ -284,17 +287,16 @@ export default function EventClient({
     : "TBA";
   const eventVenue = party?.location || "TBA";
   const isLive = isPublished;
-  const ticketsSold = (tickets || []).reduce(
-    (s: number, t: any) => s + (t.quantity_purchased || t.quantity || 1),
+  const ticketsSold = localTickets.reduce(
+    (s: number, t: any) => s + (Number(t.quantity_purchased) || Number(t.quantity) || 1),
     0,
   );
 
-  const getTierSoldCount = (tId: string, fallback: number = 0) => {
-    const matching = (tickets || []).filter((t: any) => t.ticket_tier_id === tId);
-    if (matching.length > 0) {
-      return matching.reduce((sum: number, t: any) => sum + (t.quantity_purchased || t.quantity || 1), 0);
-    }
-    return fallback;
+  const getTierSoldCount = (tId: string) => {
+    // Always derive from live localTickets; never fall back to stale quantity_sold column
+    return localTickets
+      .filter((t: any) => t.ticket_tier_id === tId)
+      .reduce((sum: number, t: any) => sum + (Number(t.quantity_purchased) || Number(t.quantity) || 1), 0);
   };
   const ticketCapacity =
     allTiers?.reduce((s: number, t: any) => s + (t.quantity || 0), 0) ||
@@ -416,7 +418,7 @@ export default function EventClient({
 
     // Tier breakdown
     const tierData = (allTiers || []).map((tier: any) => {
-      const sold = getTierSoldCount(tier.id, tier.quantity_sold || 0);
+      const sold = getTierSoldCount(tier.id);
       const capacity = tier.quantity || 0;
       const revenue = (tickets || [])
         .filter((t: any) => t.ticket_tier_id === tier.id)
@@ -805,6 +807,17 @@ export default function EventClient({
           guest_email: conciergeForm.guestEmail,
           tier: selectedTier.name,
           sent_at: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+      // Also add to localTickets so ticketsSold + per-tier counts update immediately
+      setLocalTickets((prev) => [
+        {
+          ...ticket,
+          guest_name: conciergeForm.guestName,
+          guest_email: conciergeForm.guestEmail,
+          ticket_tier_id: selectedTier.id,
+          quantity_purchased: 1,
         },
         ...prev,
       ]);
@@ -1678,7 +1691,7 @@ export default function EventClient({
                               {isTable ? "Tables" : "Tickets"}
                             </div>
                             <div className="text-sm font-extrabold text-white">
-                              {getTierSoldCount(tier.id, tier.quantity_sold || 0)} / {tier.quantity} sold
+                              {getTierSoldCount(tier.id)} / {tier.quantity} sold
                             </div>
                           </div>
                         </div>
