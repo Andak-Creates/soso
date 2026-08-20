@@ -237,29 +237,6 @@ export default function SignupPage() {
                     <p className="text-[10px] text-white/25 mt-1">Used for account verification and support.</p>
                   </div>
 
-                  {/* Plan Selection */}
-                  <div>
-                    <label className="block text-xs font-bold text-white/60 mb-3">Choose your starting plan</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="relative rounded-xl border border-emerald-500/30 bg-emerald-600/10 p-4 cursor-pointer">
-                        <input type="radio" name="plan" value="free" defaultChecked className="sr-only peer" />
-                        <div className="text-xs font-extrabold text-emerald-300">Free Plan</div>
-                        <div className="text-[11px] text-white/40 mt-1">80 guests · 5% fee</div>
-                        <div className="font-heading text-lg font-extrabold text-white mt-2">₦ 0</div>
-                        <div className="absolute top-3 right-3 h-3 w-3 rounded-full border-2 border-emerald-500 bg-emerald-500" />
-                      </label>
-                      <label className="relative rounded-xl border border-violet-500/30 bg-violet-600/10 p-4 cursor-pointer hover:border-violet-400/60 transition">
-                        <input type="radio" name="plan" value="pro" className="sr-only peer" />
-                        <div className="flex items-center gap-1.5">
-                          <div className="text-xs font-extrabold text-violet-300">Pro Plan</div>
-                          <span className="rounded bg-violet-600 px-1 py-0.5 text-[8px] font-extrabold text-white">PRO</span>
-                        </div>
-                        <div className="text-[11px] text-white/40 mt-1">Unlimited · 3% fee</div>
-                        <div className="font-heading text-lg font-extrabold text-white mt-2">₦ 15K/mo</div>
-                        <div className="absolute top-3 right-3 h-3 w-3 rounded-full border-2 border-white/20" />
-                      </label>
-                    </div>
-                  </div>
 
                   <div className="flex gap-3 pt-2">
                     <button

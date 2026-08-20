@@ -21,12 +21,14 @@ const italiana = Italiana({
 });
 
 export const metadata: Metadata = {
-  title: "Soso — Host Console",
-  description: "Manage your events, tickets, revenue, and settlements with Soso by TheScene.",
+  title: "Bhind: Host Console",
+  description:
+    "Manage your events, tickets, revenue, and settlements with Bhind by TheScene.",
   openGraph: {
-    title: "Soso Host Console",
-    description: "The premium event management platform for Nigerian nightlife organisers.",
-    siteName: "Soso by TheScene",
+    title: "Bhind Host Console",
+    description:
+      "The premium event management platform for Nigerian nightlife organisers.",
+    siteName: "Bhind by TheScene",
   },
 };
 
@@ -36,8 +38,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${plusJakarta.variable} ${inter.variable} ${italiana.variable}`}>
-      <body>{children}</body>
+    <html
+      lang="en"
+      className={`${plusJakarta.variable} ${inter.variable} ${italiana.variable}`}
+      suppressHydrationWarning={true}
+    >
+      <body suppressHydrationWarning={true}>{children}</body>
     </html>
   );
 }

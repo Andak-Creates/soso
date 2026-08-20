@@ -47,14 +47,22 @@ export async function POST(request: NextRequest) {
           }
         );
         
-        // Insert order record
-        const { error } = await supabase.from('orders').insert({
-          event_id: metadata.event_id,
-          user_id: metadata.user_id,
-          ticket_tier_id: metadata.ticket_tier_id,
-          amount_paid: amount,
-          status: 'paid',
-          paystack_ref: reference,
+        // Insert ticket record (maps to the 'tickets' table in the schema)
+        const serviceFee = metadata.service_fee ? Number(metadata.service_fee) : 0;
+        const purchasePrice = amount - serviceFee;
+        const { error } = await supabase.from('tickets').insert({
+          party_id: metadata.event_id,       // schema uses party_id, not event_id
+          user_id: metadata.user_id || null,
+          ticket_tier_id: metadata.ticket_tier_id || null,
+          purchase_price: purchasePrice,
+          service_fee: serviceFee,
+          total_paid: amount,
+          payment_status: 'completed',       // schema constraint: 'pending' | 'completed' | 'refunded'
+          reference: reference,              // schema column is 'reference', not 'paystack_ref'
+          guest_email: metadata.guest_email || null,
+          guest_name: metadata.guest_name || null,
+          quantity_purchased: metadata.quantity || 1,
+          quantity_used: 0,
         });
         
         if (error) {

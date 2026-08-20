@@ -31,7 +31,7 @@ export interface EventItem {
   capacity: number;
   ticketsSold: number;
   grossRevenue: number;
-  absorbPlatformFee: boolean; // Cover Commission & Processing Fees (7%)
+  absorbPlatformFee: boolean; // Cover Commission & Processing Fees (5%)
   hostNote?: string;
 }
 

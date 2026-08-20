@@ -1,8 +1,12 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import Header from '@/components/Header';
-import CreateEventModal from '@/components/CreateEventModal';
+import React, { useState } from "react";
+import Header from "@/components/Header";
+import CreateEventModal from "@/components/CreateEventModal";
+import ProfileModal from "@/components/ProfileModal";
+import BankAccountModal from "@/components/BankAccountModal";
+import SettlementsModal from "@/components/SettlementsModal";
+import { getOptimizedImageUrl } from "@/lib/media";
 import {
   Plus,
   ArrowRight,
@@ -15,155 +19,264 @@ import {
   AlertCircle,
   CreditCard,
   User,
-  Crown,
-} from 'lucide-react';
-import Link from 'next/link';
+  Calendar,
+  MapPin,
+} from "lucide-react";
+import Link from "next/link";
 
-export default function GlobalHostHub({ user, profile, parties, balance, totalTicketsSold }: any) {
+/** Helper to resolve the best flyer image for an event */
+function resolveFlyer(party: any): string {
+  if (party.media && party.media.length > 0) {
+    const primary =
+      party.media.find((m: any) => m.is_primary && m.media_type === "image") ||
+      party.media.find((m: any) => m.media_type === "image");
+    if (primary?.media_url) {
+      const opt = getOptimizedImageUrl(primary.media_url, 600);
+      if (opt) return opt;
+    }
+  }
+  if (party.flyer_url) {
+    const opt = getOptimizedImageUrl(party.flyer_url, 600);
+    if (opt) return opt;
+  }
+  return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600";
+}
+
+export default function GlobalHostHub({
+  user,
+  profile: initialProfile,
+  parties,
+  balance,
+  totalTicketsSold,
+}: any) {
+  const [profile, setProfile] = useState(initialProfile);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'live' | 'draft' | 'ended'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isBankOpen, setIsBankOpen] = useState(false);
+  const [isSettlementsOpen, setIsSettlementsOpen] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<
+    "all" | "live" | "draft" | "ended"
+  >("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [todayLabel, setTodayLabel] = useState("");
+
+  React.useEffect(() => {
+    setTodayLabel(
+      new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    );
+  }, []);
 
   const earnings = balance?.total_earned || 0;
   const currentBalance = balance?.current_balance || 0;
   const pendingPayout = balance?.pending_payout || 0;
-  const currency = balance?.currency || 'NGN';
-  const firstName = profile?.full_name?.split(' ')[0] || profile?.username || 'Host';
+  const currency = balance?.currency || "NGN";
+  const firstName =
+    profile?.full_name?.split(" ")[0] || profile?.username || "Host";
 
   const formatMoney = (amount: number) => {
-    return new Intl.NumberFormat('en-NG', { style: 'currency', currency }).format(amount);
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount);
   };
 
+  // Filter parties by activeTab and searchQuery
+  const filteredParties = parties.filter((party: any) => {
+    const matchesSearch =
+      !searchQuery ||
+      party.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      party.location?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    if (!matchesSearch) return false;
+    if (activeTab === "all") return true;
+
+    const isPast = party.date && new Date(party.date) < new Date();
+    if (activeTab === "ended") return isPast;
+    if (activeTab === "live") return party.is_published && !isPast;
+    if (activeTab === "draft") return !party.is_published && !isPast;
+
+    return true;
+  });
+
   return (
-    <div className="h-screen bg-black flex flex-col font-body overflow-hidden">
+    <div className="h-screen bg-[#080809] flex flex-col font-body overflow-hidden text-[#F9FAFB]">
       {/* Header */}
-      <Header organizerName={profile?.full_name || profile?.username || 'TheScene Nightlife LLC'} plan="free" />
+      <Header
+        organizerName={
+          profile?.full_name || profile?.username || "TheScene Host"
+        }
+        avatarUrl={profile?.avatar_url}
+        onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenPayoutSettings={() => setIsBankOpen(true)}
+      />
 
       {/* Main Hub Container */}
       <div className="flex-1 w-full overflow-y-auto">
-
-
         {/* Inner Content */}
-        <div className="max-w-7xl mx-auto px-8 py-9 space-y-7">
+        <div className="max-w-7xl mx-auto px-6 md:px-8 py-8 space-y-8">
           {/* Top Bar */}
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="font-heading text-2xl font-extrabold text-white leading-tight">
-                Good evening, <span className="text-violet-600">{firstName}</span>
+              <h1 className="font-heading text-2xl md:text-3xl font-black text-white tracking-tight">
+                Welcome,{" "}
+                <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
+                  {firstName}
+                </span>
               </h1>
-              <p className="text-xs text-white/60 mt-1">
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })} &nbsp;·&nbsp; Your next payout disburses tomorrow at 06:00 AM.
-              </p>
+              <div className="text-xs text-white/50 mt-1 flex flex-col md:flex-row md:items-center gap-2">
+                <div className="flex gap-2 items-start">
+                  <span>{todayLabel}</span>
+                  <span>•</span>
+                </div>
+                <span className="text-emerald-400/90 font-medium">
+                  Payouts clear automatically upon event completion
+                </span>
+              </div>
             </div>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 font-heading text-xs font-bold text-white hover:bg-violet-700 transition shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              Create New Event
-            </button>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-violet-500 transition shadow-lg shadow-violet-700/25"
+              >
+                <Plus className="h-4 w-4" />
+                Create New Event
+              </button>
+            </div>
           </div>
 
           {/* OVERVIEW STAT CARDS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Lifetime Earnings */}
-            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0f0f11] p-5 shadow-sm border-l-4 border-l-violet-600 transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-white/40">
-                Lifetime Earnings
+            <div
+              onClick={() => setIsSettlementsOpen(true)}
+              className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#131317] to-[#0c0c0e] p-5 shadow-xl transition-all duration-300 hover:border-violet-500/40 hover:-translate-y-1 group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/40">
+                  Lifetime Earnings
+                </span>
+                <div className="rounded-xl bg-violet-500/10 p-2.5 text-violet-400 group-hover:scale-110 transition-transform">
+                  <TrendingUp className="h-4 w-4" />
+                </div>
               </div>
-              <div className="font-heading text-2xl font-extrabold text-violet-600 mt-1.5">
+              <div className="font-heading text-2xl font-black text-white mt-2 tracking-tight">
                 {formatMoney(earnings)}
               </div>
-              <div className="text-xs text-white/60 mt-1">Across all events</div>
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg bg-violet-50 p-2.5 text-violet-600 opacity-60">
-                <TrendingUp className="h-5 w-5" />
+              <div className="text-[11px] font-medium text-violet-400/80 mt-1 flex items-center justify-between">
+                <span>Across all events</span>
+                <span className="text-[10px] text-white/30 group-hover:text-white/60">View details →</span>
               </div>
             </div>
 
             {/* Current Balance */}
-            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0f0f11] p-5 shadow-sm border-l-4 border-l-emerald-600 transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-white/40">
-                Available to Withdraw
+            <div
+              onClick={() => setIsSettlementsOpen(true)}
+              className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#131317] to-[#0c0c0e] p-5 shadow-xl transition-all duration-300 hover:border-emerald-500/40 hover:-translate-y-1 group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/40">
+                  Available to Withdraw
+                </span>
+                <div className="rounded-xl bg-emerald-500/10 p-2.5 text-emerald-400 group-hover:scale-110 transition-transform">
+                  <CheckCircle2 className="h-4 w-4" />
+                </div>
               </div>
-              <div className="font-heading text-2xl font-extrabold text-emerald-600 mt-1.5">
+              <div className="font-heading text-2xl font-black text-emerald-400 mt-2 tracking-tight">
                 {formatMoney(currentBalance)}
               </div>
-              <div className="text-xs text-white/60 mt-1">Ready for settlement</div>
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg bg-emerald-50 p-2.5 text-emerald-600 opacity-60">
-                <CheckCircle2 className="h-5 w-5" />
+              <div className="text-[11px] font-medium text-emerald-400/80 mt-1 flex items-center justify-between">
+                <span>Ready for settlement</span>
+                <span className="text-[10px] text-white/30 group-hover:text-white/60">Withdraw →</span>
               </div>
             </div>
 
             {/* Accumulating */}
-            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0f0f11] p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-white/40">
-                Accumulating
+            <div
+              onClick={() => setIsSettlementsOpen(true)}
+              className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#131317] to-[#0c0c0e] p-5 shadow-xl transition-all duration-300 hover:border-amber-500/40 hover:-translate-y-1 group cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/40">
+                  Accumulating
+                </span>
+                <div className="rounded-xl bg-amber-500/10 p-2.5 text-amber-400 group-hover:scale-110 transition-transform">
+                  <Clock className="h-4 w-4" />
+                </div>
               </div>
-              <div className="font-heading text-2xl font-extrabold text-white mt-1.5">
+              <div className="font-heading text-2xl font-black text-amber-300 mt-2 tracking-tight">
                 {formatMoney(pendingPayout)}
               </div>
-              <div className="text-xs text-white/60 mt-1">Pending clearance</div>
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg bg-white/10 p-2.5 text-white/60 opacity-60">
-                <Clock className="h-5 w-5" />
+              <div className="text-[11px] font-medium text-amber-400/80 mt-1">
+                Pending event clearance
               </div>
             </div>
 
             {/* Total Tickets Sold */}
-            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#0f0f11] p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-white/40">
-                Total Tickets Sold
+            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#131317] to-[#0c0c0e] p-5 shadow-xl transition-all duration-300 hover:border-fuchsia-500/40 hover:-translate-y-1 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/40">
+                  Total Tickets Sold
+                </span>
+                <div className="rounded-xl bg-fuchsia-500/10 p-2.5 text-fuchsia-400 group-hover:scale-110 transition-transform">
+                  <Ticket className="h-4 w-4" />
+                </div>
               </div>
-              <div className="font-heading text-2xl font-extrabold text-white mt-1.5">
+              <div className="font-heading text-2xl font-black text-white mt-2 tracking-tight">
                 {totalTicketsSold}
               </div>
-              <div className="text-xs text-white/60 mt-1">Across {parties.length} events</div>
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg bg-white/10 p-2.5 text-white/60 opacity-60">
-                <Ticket className="h-5 w-5" />
+              <div className="text-[11px] font-medium text-fuchsia-400/80 mt-1">
+                Across {parties.length} events
               </div>
             </div>
           </div>
 
           {/* QUICK ACTIONS STRIP */}
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap pt-1">
             <button
-              onClick={() => alert('Opening settlement history...')}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#0f0f11] px-4 py-2.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-violet-200 hover:bg-violet-50/50 hover:text-violet-600 transition"
+              onClick={() => setIsSettlementsOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white hover:border-violet-500/40 transition-all shadow-sm"
             >
-              <CreditCard className="h-3.5 w-3.5 text-white/60" />
+              <CreditCard className="h-3.5 w-3.5 text-violet-400" />
               View Settlements
             </button>
 
             <button
-              onClick={() => alert('Opening payout settings...')}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#0f0f11] px-4 py-2.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-violet-200 hover:bg-violet-50/50 hover:text-violet-600 transition"
+              onClick={() => setIsBankOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white hover:border-emerald-500/40 transition-all shadow-sm"
             >
-              <TrendingUp className="h-3.5 w-3.5 text-white/60" />
-              Payout Settings
+              <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+              Payout Bank Account
             </button>
 
             <button
-              onClick={() => alert('Opening account settings...')}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#0f0f11] px-4 py-2.5 text-xs font-semibold text-slate-800 shadow-sm hover:border-violet-200 hover:bg-violet-50/50 hover:text-violet-600 transition"
+              onClick={() => setIsProfileOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white hover:border-fuchsia-500/40 transition-all shadow-sm"
             >
-              <User className="h-3.5 w-3.5 text-white/60" />
-              Account & Profile
-            </button>
-
-            <button
-              onClick={() => alert('Upgrade to Soso Pro')}
-              className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2.5 text-xs font-bold text-orange-700 shadow-sm hover:bg-orange-100 transition"
-            >
-              <Crown className="h-3.5 w-3.5 text-orange-700" />
-              Upgrade Plan
+              <User className="h-3.5 w-3.5 text-fuchsia-400" />
+              Account & Host Profile
             </button>
           </div>
 
           {/* EVENTS SECTION */}
-          <div className="space-y-4 pt-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-5 pt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="font-heading text-lg font-extrabold text-white">My Events</h2>
-                <p className="text-xs text-white/60">2 active &nbsp;·&nbsp; 1 draft</p>
+                <h2 className="font-heading text-xl font-extrabold text-white tracking-tight">
+                  My Events
+                </h2>
+                <p className="text-xs text-white/40 mt-0.5">
+                  {parties.filter((p: any) => p.is_published).length} published
+                  &nbsp;·&nbsp;{" "}
+                  {parties.filter((p: any) => !p.is_published).length} draft
+                </p>
               </div>
 
               <div className="flex items-center gap-3">
@@ -172,18 +285,18 @@ export default function GlobalHostHub({ user, profile, parties, balance, totalTi
                   placeholder="Search events..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="rounded-lg border border-white/10 bg-[#0f0f11] px-3.5 py-1.5 text-xs text-white outline-none focus:border-violet-600 focus:ring-1 focus:ring-violet-600 transition w-48"
+                  className="rounded-xl border border-white/10 bg-[#111114] px-4 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition w-full sm:w-56"
                 />
 
-                <div className="flex rounded-lg border border-white/10 bg-white/10 p-0.5 text-xs font-semibold">
-                  {(['all', 'live', 'draft', 'ended'] as const).map((tab) => (
+                <div className="flex rounded-xl border border-white/10 bg-[#111114] p-1 text-xs font-semibold">
+                  {(["all", "live", "draft", "ended"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
-                      className={`rounded-md px-3 py-1 capitalize transition ${
+                      className={`px-3 py-1.5 rounded-lg capitalize transition ${
                         activeTab === tab
-                          ? 'bg-[#0f0f11] text-white shadow-sm'
-                          : 'text-white/60 hover:text-white'
+                          ? "bg-violet-600 text-white font-bold shadow-md"
+                          : "text-white/40 hover:text-white"
                       }`}
                     >
                       {tab}
@@ -193,88 +306,144 @@ export default function GlobalHostHub({ user, profile, parties, balance, totalTi
               </div>
             </div>
 
-            {/* EVENTS GRID */}
+            {/* Events Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Create Card */}
+              {/* Create Card Prompt */}
               <div
                 onClick={() => setIsModalOpen(true)}
-                className="group flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-[#0f0f11] p-8 text-center min-h-[290px] cursor-pointer transition hover:border-violet-600 hover:bg-violet-50/30 hover:-translate-y-0.5"
+                className="group relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/15 bg-white/[0.02] p-8 text-center cursor-pointer hover:border-violet-500/50 hover:bg-violet-500/[0.03] transition-all min-h-[280px]"
               >
-                <div className="flex h-13 w-13 items-center justify-center rounded-full bg-violet-100 text-violet-600 group-hover:scale-110 transition">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-violet-600/20 text-violet-400 group-hover:scale-110 transition-transform">
                   <Plus className="h-6 w-6" />
                 </div>
-                <div className="font-heading text-base font-extrabold text-white mt-3.5">
+                <div className="font-heading text-sm font-extrabold text-white mt-4">
                   Create New Event
                 </div>
-                <p className="text-xs text-white/60 max-w-[200px] mt-1 leading-relaxed">
+                <p className="text-xs text-white/50 max-w-[200px] mt-1 leading-relaxed">
                   Tickets, VVIP tables & concierges live in under 2 minutes.
                 </p>
               </div>
 
               {/* Dynamic Event Cards */}
-              {parties.map((party: any) => {
+              {filteredParties.map((party: any) => {
                 const sold = party.tickets_sold || 0;
                 const total = party.ticket_quantity || 1;
-                const percent = Math.round((sold / total) * 100);
-                
+                const percent = Math.min(100, Math.round((sold / total) * 100));
+
                 // Determine event status
-                const eventDate = new Date(party.date);
-                const isPast = eventDate < new Date();
-                const isLive = party.is_published;
-                
-                let statusBadge = { text: 'Draft', classes: 'bg-amber-100 text-amber-800' };
+                const eventDate = party.date ? new Date(party.date) : null;
+                const isPast = eventDate ? eventDate < new Date() : false;
+                const isLive = party.is_published && !isPast;
+
+                let statusBadge = {
+                  text: "Draft",
+                  classes: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+                };
                 if (isPast) {
-                  statusBadge = { text: 'Ended', classes: 'bg-slate-200 text-slate-700' };
+                  statusBadge = {
+                    text: "Ended",
+                    classes: "bg-white/10 text-white/60 border-white/10",
+                  };
                 } else if (isLive) {
-                  statusBadge = { text: 'Live & Selling', classes: 'bg-emerald-100 text-emerald-800' };
+                  statusBadge = {
+                    text: "Live & Selling",
+                    classes:
+                      "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+                  };
                 }
 
-                const bgImage = party.flyer_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600';
+                const bgImage = resolveFlyer(party);
 
                 return (
-                  <Link href={`/events/${party.id}`} key={party.id} className="block">
-                    <div className="group rounded-2xl border border-white/10 bg-[#0f0f11] overflow-hidden shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:border-violet-300">
+                  <Link
+                    href={`/events/${party.id}`}
+                    key={party.id}
+                    className="block group"
+                  >
+                    <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-hidden shadow-xl transition-all duration-300 hover:-translate-y-1.5 hover:border-violet-500/50 hover:shadow-2xl hover:shadow-violet-950/30">
+                      {/* Card Image Header */}
                       <div
-                        className="h-40 bg-cover bg-center relative p-3.5 flex items-start justify-between"
+                        className="h-44 bg-cover bg-center relative p-4 flex flex-col justify-between"
                         style={{
-                          backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%), url('${bgImage}')`,
+                          backgroundImage: `linear-gradient(180deg, rgba(8,8,9,0.3) 0%, rgba(8,8,9,0.85) 100%), url('${bgImage}')`,
                         }}
                       >
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10.5px] font-extrabold relative z-10 ${statusBadge.classes}`}>
-                          {statusBadge.text}
-                        </span>
-                        <div className="flex items-center gap-1 text-[11px] font-semibold text-white/90 relative z-10">
-                          <span>Manage</span>
-                          <ChevronRight className="h-3 w-3" />
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider backdrop-blur-md shadow-sm ${statusBadge.classes}`}
+                          >
+                            {statusBadge.text}
+                          </span>
+
+                          <div className="flex items-center gap-1 rounded-full bg-black/50 border border-white/10 px-3 py-1 text-[11px] font-bold text-white/90 backdrop-blur-md group-hover:bg-violet-600 group-hover:border-violet-500 transition-colors">
+                            <span>Manage</span>
+                            <ChevronRight className="h-3 w-3" />
+                          </div>
+                        </div>
+
+                        {/* Title & Overlay info inside header */}
+                        <div>
+                          <h3 className="font-heading text-lg font-black text-white line-clamp-1 group-hover:text-violet-300 transition-colors">
+                            {party.title}
+                          </h3>
+                          <div className="flex items-center gap-3 text-xs text-white/70 mt-1">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-violet-400" />
+                              {eventDate
+                                ? eventDate.toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })
+                                : "TBA"}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1 truncate">
+                              <MapPin className="h-3 w-3 text-violet-400 shrink-0" />
+                              <span className="truncate">
+                                {party.location || party.city || "TBA"}
+                              </span>
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <div className="p-5">
-                        <h3 className="font-heading text-base font-extrabold text-white line-clamp-1 group-hover:text-violet-600 transition">
-                          {party.title}
-                        </h3>
-                        <p className="text-xs text-white/60 mt-1 line-clamp-1">
-                          {new Date(party.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} &nbsp;·&nbsp; {party.location || 'TBA'}
-                        </p>
-                        <div className="h-1 w-full bg-white/10 rounded-full mt-3 overflow-hidden">
-                          <div className={`h-full rounded-full ${isLive ? 'bg-violet-600' : 'bg-slate-300'}`} style={{ width: `${percent}%` }} />
-                        </div>
-                        <div className="flex items-center justify-between mt-4 pt-3.5 border-t border-white/5">
-                          <div>
-                            <div className="text-xs text-white/60 font-medium">{sold} / {total} {isLive ? 'sold' : 'guests'}</div>
-                            {isLive ? (
-                              <div className="text-[11px] text-white/40">{percent}% sold through</div>
-                            ) : (
-                              <div className="text-[11px] font-bold text-orange-700">Free plan: 80 guest cap</div>
-                            )}
+
+                      {/* Card Content Footer */}
+                      <div className="p-5 bg-[#0e0e11] space-y-3">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs font-semibold">
+                            <span className="text-white/60">Ticket Sales</span>
+                            <span className="text-white font-extrabold">
+                              {sold} / {total}
+                            </span>
                           </div>
-                          {isLive ? (
-                            <div className="font-heading text-sm font-extrabold text-violet-600">
-                              {/* Ideally we sum up actual ticket revenue, but for now we multiply sold by price */}
-                              {formatMoney(sold * (party.ticket_price || 0))}
-                            </div>
-                          ) : (
-                            <div className="text-xs font-bold text-white/40">Unpublished</div>
-                          )}
+
+                          {/* Progress bar */}
+                          <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                isLive
+                                  ? "bg-gradient-to-r from-violet-500 to-fuchsia-500"
+                                  : "bg-white/30"
+                              }`}
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                          <div className="text-[11px] font-bold text-white/40">
+                            {isLive
+                              ? `${percent}% capacity reached`
+                              : isPast
+                                ? "Event concluded"
+                                : "Draft listing"}
+                          </div>
+                          <div className="font-heading text-sm font-black text-violet-400">
+                            {party.ticket_price
+                              ? formatMoney(party.ticket_price)
+                              : "Free"}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -286,10 +455,35 @@ export default function GlobalHostHub({ user, profile, parties, balance, totalTi
         </div>
       </div>
 
-      {/* Create Event Modal */}
+      {/* Modals */}
       <CreateEventModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+      />
+
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        user={user}
+        initialProfile={profile}
+        onProfileUpdated={(updated) => setProfile(updated)}
+      />
+
+      <BankAccountModal
+        isOpen={isBankOpen}
+        onClose={() => setIsBankOpen(false)}
+        user={user}
+      />
+
+      <SettlementsModal
+        isOpen={isSettlementsOpen}
+        onClose={() => setIsSettlementsOpen(false)}
+        user={user}
+        balance={balance}
+        onOpenPayoutSettings={() => {
+          setIsSettlementsOpen(false);
+          setIsBankOpen(true);
+        }}
       />
     </div>
   );

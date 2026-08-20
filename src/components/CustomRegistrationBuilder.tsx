@@ -7,7 +7,6 @@ import {
   GripVertical,
   ChevronDown,
   ChevronUp,
-  ToggleLeft,
   AlignLeft,
   Hash,
   List,

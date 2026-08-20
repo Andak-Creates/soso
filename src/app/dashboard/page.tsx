@@ -41,21 +41,42 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single();
 
-  // Fetch their parties
+  // Fetch their parties with media and ticket counts
   const { data: parties } = await supabase
     .from('parties')
-    .select('*')
+    .select('*, media:party_media(*), ticket_tiers(quantity_sold, quantity)')
     .eq('host_id', user.id)
     .order('created_at', { ascending: false });
 
-  // Compute total tickets sold and total earnings (dummy or simple calculation for now)
-  // We can join tickets or just aggregate. For now we will sum up tickets_sold in parties.
+  // Fetch actual tickets to guarantee 100% accurate count
+  const partyIds = parties?.map(p => p.id) || [];
   let totalTicketsSold = 0;
-  if (parties) {
-    parties.forEach(p => {
-      totalTicketsSold += (p.tickets_sold || 0);
-    });
+  const partyTicketsCountMap: Record<string, number> = {};
+
+  if (partyIds.length > 0) {
+    const { data: allTickets } = await supabase
+      .from('tickets')
+      .select('party_id, quantity_purchased')
+      .in('party_id', partyIds);
+
+    if (allTickets && allTickets.length > 0) {
+      allTickets.forEach(t => {
+        const qty = Number(t.quantity_purchased) || 1;
+        totalTicketsSold += qty;
+        partyTicketsCountMap[t.party_id] = (partyTicketsCountMap[t.party_id] || 0) + qty;
+      });
+    }
   }
+
+  // Update parties array with live computed tickets_sold & accurate capacity
+  const enrichedParties = (parties || []).map(p => {
+    const tiersCapacity = (p.ticket_tiers || []).reduce((sum: number, t: any) => sum + (t.quantity || 0), 0);
+    return {
+      ...p,
+      tickets_sold: partyTicketsCountMap[p.id] ?? p.tickets_sold ?? 0,
+      ticket_quantity: tiersCapacity > 0 ? tiersCapacity : p.ticket_quantity,
+    };
+  });
 
   // Fetch host balances if available
   const { data: balance } = await supabase
@@ -68,7 +89,7 @@ export default async function DashboardPage() {
     <DashboardClient 
       user={user} 
       profile={profile} 
-      parties={parties || []} 
+      parties={enrichedParties} 
       balance={balance}
       totalTicketsSold={totalTicketsSold}
     />
