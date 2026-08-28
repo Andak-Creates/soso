@@ -49,7 +49,7 @@ export default function SettlementsModal({
     try {
       const { data, error } = await supabase
         .from("host_earnings_logs")
-        .select("*, party:parties(title, date)")
+        .select("*, party:parties(title, date), ticket:tickets(reference)")
         .order("created_at", { ascending: false })
         .limit(30);
 
@@ -73,16 +73,56 @@ export default function SettlementsModal({
       alert("No available balance to withdraw.");
       return;
     }
+    if (!user?.id) {
+      alert("Please sign in to request a withdrawal.");
+      return;
+    }
+
     setWithdrawing(true);
     try {
-      // Typically creates a payout request in DB or triggers payout workflow
-      setTimeout(() => {
+      // 1. Get the host's active bank account
+      const { data: bankAccount, error: bankError } = await supabase
+        .from("host_bank_accounts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (bankError || !bankAccount) {
+        alert("Please add a payout bank account before requesting a withdrawal.");
         setWithdrawing(false);
-        setWithdrawSuccess(true);
-        setTimeout(() => setWithdrawSuccess(false), 4000);
-      }, 1000);
+        return;
+      }
+
+      // 2. Insert the withdrawal request
+      const { data: wrData, error: wrError } = await supabase
+        .from("withdrawal_requests")
+        .insert({
+          host_id: user.id,
+          bank_account_id: bankAccount.id,
+          amount: currentBalance,
+          currency: currency,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+
+      if (wrError || !wrData) throw new Error(wrError?.message || "Failed to submit withdrawal request");
+
+      // 3. Notify admin via Edge Function (non-fatal if it fails)
+      try {
+        await supabase.functions.invoke("notify-admin-withdrawal", {
+          body: { withdrawal_request_id: wrData.id },
+        });
+      } catch (notifyErr) {
+        console.warn("Admin notification failed (non-fatal):", notifyErr);
+      }
+
+      setWithdrawSuccess(true);
+      setTimeout(() => setWithdrawSuccess(false), 5000);
     } catch (err: any) {
       alert("Failed to request withdrawal: " + err.message);
+    } finally {
       setWithdrawing(false);
     }
   };
@@ -121,34 +161,43 @@ export default function SettlementsModal({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
               <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
-                Lifetime Revenue
+                Total Net Earned
               </span>
               <div className="text-xl font-heading font-black text-white mt-1">
                 {formatMoney(earnings)}
+              </div>
+              <div className="text-[10px] font-medium text-white/40 mt-1">
+                95% host share from ticket sales
               </div>
             </div>
 
             <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-emerald-400/80 uppercase tracking-wider">
-                  Available Now
+                  Settled to Bank
                 </span>
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
               </div>
               <div className="text-xl font-heading font-black text-emerald-400 mt-1">
-                {formatMoney(currentBalance)}
+                {formatMoney(balance?.total_withdrawn || 0)}
+              </div>
+              <div className="text-[10px] font-medium text-emerald-400/70 mt-1">
+                Directly disbursed to your account
               </div>
             </div>
 
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-amber-400/80 uppercase tracking-wider">
-                  Accumulating
+                  Pending Settlement
                 </span>
                 <Clock className="h-3.5 w-3.5 text-amber-400" />
               </div>
               <div className="text-xl font-heading font-black text-amber-300 mt-1">
                 {formatMoney(pendingPayout)}
+              </div>
+              <div className="text-[10px] font-medium text-amber-400/70 mt-1">
+                Settles tomorrow morning (T+1)
               </div>
             </div>
           </div>
@@ -171,21 +220,37 @@ export default function SettlementsModal({
                   Edit Bank Details
                 </button>
               )}
-              <button
-                type="button"
-                onClick={handleRequestWithdrawal}
-                disabled={withdrawing || currentBalance <= 0}
-                className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 transition shadow-lg shadow-emerald-700/20 disabled:opacity-40"
-              >
-                {withdrawing ? "Processing..." : "Withdraw Now"}
-              </button>
             </div>
+          </div>
+
+          {/* Fee & Payout Terms Info */}
+          <div className="p-4 rounded-2xl border border-violet-500/20 bg-violet-500/5 text-xs text-violet-200/90 leading-relaxed space-y-2">
+            <div className="flex items-center gap-2 font-bold text-white text-xs">
+              <span className="text-violet-400">💡</span> Automated Payout & Fee Structure
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] pt-1">
+              <div className="rounded-xl bg-white/5 p-2.5 border border-white/5">
+                <span className="text-white/40 block text-[10px] uppercase font-bold">Host Split</span>
+                <span className="font-bold text-emerald-400">95% of ticket sales</span>
+              </div>
+              <div className="rounded-xl bg-white/5 p-2.5 border border-white/5">
+                <span className="text-white/40 block text-[10px] uppercase font-bold">Platform Fee</span>
+                <span className="font-bold text-white/80">5% service fee</span>
+              </div>
+              <div className="rounded-xl bg-white/5 p-2.5 border border-white/5">
+                <span className="text-white/40 block text-[10px] uppercase font-bold">Settlement Schedule</span>
+                <span className="font-bold text-amber-300">Daily Morning (T+1)</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-white/50 pt-1">
+              * Standard Paystack payment gateway processing fees (1.5%) apply to final settlement into your Nigerian bank account.
+            </p>
           </div>
 
           {withdrawSuccess && (
             <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl">
               <CheckCircle2 className="h-4 w-4" />
-              Withdrawal request submitted! Payout will be processed to your active bank account.
+              ✓ Withdrawal request submitted! We will review and process your payout within 1 business day.
             </div>
           )}
 
@@ -216,6 +281,11 @@ export default function SettlementsModal({
                     <div>
                       <span className="font-bold text-white block">
                         {log.party?.title || "Event Settlement"}
+                        {(log.ticket?.reference || "").toLowerCase().startsWith("concierge_") && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            Concierge
+                          </span>
+                        )}
                       </span>
                       <span className="text-[10px] text-white/40">
                         {new Date(log.created_at).toLocaleDateString("en-US", {

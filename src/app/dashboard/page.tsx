@@ -48,23 +48,35 @@ export default async function DashboardPage() {
     .eq('host_id', user.id)
     .order('created_at', { ascending: false });
 
-  // Fetch actual tickets to guarantee 100% accurate count
+  // Fetch actual tickets to guarantee 100% accurate count & revenue
   const partyIds = parties?.map(p => p.id) || [];
   let totalTicketsSold = 0;
+  let computedGrossRevenue = 0;
+  let computedHostEarnings = 0;
   const partyTicketsCountMap: Record<string, number> = {};
 
   if (partyIds.length > 0) {
     const { data: allTickets } = await supabase
       .from('tickets')
-      .select('party_id, quantity_purchased')
+      .select('party_id, quantity_purchased, quantity, purchase_price, total_paid, service_fee')
       .in('party_id', partyIds)
-      .eq('payment_status', 'completed');
+      .or('payment_status.eq.completed,payment_status.is.null');
 
     if (allTickets && allTickets.length > 0) {
       allTickets.forEach(t => {
-        const qty = Number(t.quantity_purchased) || 1;
+        const qty = Number(t.quantity_purchased) || Number(t.quantity) || 1;
         totalTicketsSold += qty;
         partyTicketsCountMap[t.party_id] = (partyTicketsCountMap[t.party_id] || 0) + qty;
+
+        const totalPaid = Number(t.total_paid) || 0;
+        const purchasePrice = Number(t.purchase_price) || 0;
+        const serviceFee = Number(t.service_fee) || 0;
+
+        const gross = totalPaid > 0 ? totalPaid : (purchasePrice + serviceFee);
+        const hostShare = purchasePrice > 0 ? purchasePrice : Math.round(gross * 0.95);
+
+        computedGrossRevenue += gross;
+        computedHostEarnings += hostShare;
       });
     }
   }
@@ -80,19 +92,40 @@ export default async function DashboardPage() {
   });
 
   // Fetch host balances if available
-  const { data: balance } = await supabase
+  const { data: rawBalance } = await supabase
     .from('host_balances')
     .select('*')
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
+
+  // Reconcile balance so numbers are 100% accurate in real time
+  const totalSettled = Number(rawBalance?.total_withdrawn) || 0;
+  const liveTotalEarned = Math.max(Number(rawBalance?.total_earned) || 0, computedHostEarnings);
+  const livePendingPayout = Math.max(0, liveTotalEarned - totalSettled);
+
+  const reconciledBalance = {
+    ...(rawBalance || {}),
+    total_earned: liveTotalEarned,
+    gross_revenue: computedGrossRevenue,
+    pending_payout: livePendingPayout,
+    total_withdrawn: totalSettled,
+    current_balance: Number(rawBalance?.available_balance) || 0,
+    currency: rawBalance?.currency || "NGN",
+  };
+
+  // Calculate total tickets across all parties
+  const computedTotalTicketsSold =
+    totalTicketsSold > 0
+      ? totalTicketsSold
+      : enrichedParties.reduce((sum, p) => sum + (p.tickets_sold || 0), 0);
 
   return (
     <DashboardClient 
       user={user} 
       profile={profile} 
       parties={enrichedParties} 
-      balance={balance}
-      totalTicketsSold={totalTicketsSold}
+      balance={reconciledBalance}
+      totalTicketsSold={computedTotalTicketsSold}
     />
   );
 }

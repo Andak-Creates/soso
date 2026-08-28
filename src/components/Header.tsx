@@ -29,7 +29,7 @@ export default function Header({
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-[62px] w-full items-center justify-between border-b border-white/10 bg-[#0f0f11] px-4 md:px-8">
+    <header className="sticky top-0 z-200 flex h-[62px] w-full items-center justify-between border-b border-white/10 bg-[#0f0f11] px-4 md:px-8">
       {/* Brand & Mobile Menu */}
       <div className="flex items-center gap-3">
         {onMenuToggle && (
@@ -71,7 +71,10 @@ export default function Header({
         {/* User Avatar with Dropdown */}
         <div className="relative">
           <img
-            src={avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200"}
+            src={
+              avatarUrl ||
+              "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200"
+            }
             alt="Host Avatar"
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className="h-8 w-8 rounded-full object-cover ring-2 ring-white/10 cursor-pointer hover:ring-violet-500 transition"
@@ -80,14 +83,16 @@ export default function Header({
           {dropdownOpen && (
             <>
               {/* Invisible overlay to close dropdown */}
-              <div 
-                className="fixed inset-0 z-40" 
-                onClick={() => setDropdownOpen(false)} 
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setDropdownOpen(false)}
               />
-              
+
               <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-white/10 bg-[#111114] p-1.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-3 py-2 border-b border-white/5 mb-1">
-                  <p className="text-xs font-bold text-white truncate">{organizerName}</p>
+                  <p className="text-xs font-bold text-white truncate">
+                    {organizerName}
+                  </p>
                   <p className="text-[10px] text-white/40">Host Account</p>
                 </div>
 

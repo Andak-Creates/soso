@@ -1,17 +1,18 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { createClient } from "@/lib/supabase/client";
 import {
-  X,
-  Building,
   CreditCard,
+  Building,
   CheckCircle2,
   AlertTriangle,
   Loader2,
+  X,
   Search,
   Check,
+  ShieldCheck,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 
 interface BankAccountModalProps {
   isOpen: boolean;
@@ -20,39 +21,40 @@ interface BankAccountModalProps {
   onSaved?: () => void;
 }
 
+// Major Nigerian Banks supported by Paystack
 const NIGERIAN_BANKS = [
   { name: "Access Bank", code: "044" },
+  { name: "Access Bank (Diamond)", code: "063" },
   { name: "Citibank Nigeria", code: "023" },
   { name: "Ecobank Nigeria", code: "050" },
   { name: "Fidelity Bank", code: "070" },
   { name: "First Bank of Nigeria", code: "011" },
   { name: "First City Monument Bank (FCMB)", code: "214" },
-  { name: "Globus Bank", code: "00103" },
   { name: "Guaranty Trust Bank (GTBank)", code: "058" },
   { name: "Heritage Bank", code: "030" },
   { name: "Jaiz Bank", code: "301" },
   { name: "Keystone Bank", code: "082" },
   { name: "Kuda Bank", code: "50211" },
   { name: "Moniepoint MFB", code: "50515" },
-  { name: "OPay (PayCom)", code: "100004" },
-  { name: "Paga", code: "100002" },
-  { name: "PalmPay", code: "100033" },
+  { name: "OPay Digital Services", code: "999992" },
+  { name: "Palmpay", code: "999991" },
   { name: "Polaris Bank", code: "076" },
   { name: "Providus Bank", code: "101" },
   { name: "Stanbic IBTC Bank", code: "221" },
   { name: "Standard Chartered Bank", code: "068" },
   { name: "Sterling Bank", code: "232" },
   { name: "Suntrust Bank", code: "100" },
+  { name: "Taj Bank", code: "302" },
   { name: "Titan Trust Bank", code: "102" },
   { name: "Union Bank of Nigeria", code: "032" },
   { name: "United Bank for Africa (UBA)", code: "033" },
   { name: "Unity Bank", code: "215" },
   { name: "VFD Microfinance Bank", code: "566" },
-  { name: "Wema Bank", code: "035" },
+  { name: "Wema Bank (ALAT)", code: "035" },
   { name: "Zenith Bank", code: "057" },
-];
+].sort((a, b) => a.name.localeCompare(b.name));
 
-export default function BankAccountModal({
+export function BankAccountModal({
   isOpen,
   onClose,
   user,
@@ -67,9 +69,16 @@ export default function BankAccountModal({
   const [selectedBank, setSelectedBank] = useState<{ name: string; code: string } | null>(null);
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("");
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const [isResolved, setIsResolved] = useState(false);
+
   const [searchBankQuery, setSearchBankQuery] = useState("");
   const [showBankDropdown, setShowBankDropdown] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [activatingPayout, setActivatingPayout] = useState(false);
+  const [payoutActivated, setPayoutActivated] = useState(false);
+  const [subaccountError, setSubaccountError] = useState<string | null>(null);
 
   const fetchBankAccount = useCallback(async () => {
     setLoading(true);
@@ -93,11 +102,13 @@ export default function BankAccountModal({
         setSelectedBank(bank);
         setAccountNumber(data.account_number || "");
         setAccountName(data.account_name || "");
+        setIsResolved(true);
       } else {
         setExistingId(null);
         setSelectedBank(null);
         setAccountNumber("");
         setAccountName("");
+        setIsResolved(false);
       }
     } catch (err) {
       console.error("Error fetching host bank account:", err);
@@ -112,10 +123,66 @@ export default function BankAccountModal({
     }
   }, [isOpen, user, fetchBankAccount]);
 
+  // Live NUBAN resolution whenever 10 digits and a bank are selected
+  const resolveNuban = useCallback(async (num: string, bankCode: string) => {
+    if (num.length !== 10 || !bankCode) return;
+
+    setIsResolving(true);
+    setResolveError(null);
+    setIsResolved(false);
+
+    try {
+      const res = await fetch("/api/paystack/resolve-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_number: num, bank_code: bankCode }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.resolved) {
+        setResolveError(data.error || "Could not verify account name with bank.");
+        setAccountName("");
+        setIsResolved(false);
+      } else {
+        setAccountName(data.account_name);
+        setIsResolved(true);
+        setResolveError(null);
+      }
+    } catch (err: any) {
+      setResolveError("Verification request failed. Please check network connection.");
+      setIsResolved(false);
+    } finally {
+      setIsResolving(false);
+    }
+  }, []);
+
+  const handleAccountNumberChange = (val: string) => {
+    const cleaned = val.replace(/\D/g, "").slice(0, 10);
+    setAccountNumber(cleaned);
+    setIsResolved(false);
+    setResolveError(null);
+
+    if (cleaned.length === 10 && selectedBank) {
+      resolveNuban(cleaned, selectedBank.code);
+    }
+  };
+
+  const handleBankSelect = (bank: { name: string; code: string }) => {
+    setSelectedBank(bank);
+    setShowBankDropdown(false);
+    setSearchBankQuery("");
+    setIsResolved(false);
+    setResolveError(null);
+
+    if (accountNumber.length === 10) {
+      resolveNuban(accountNumber, bank.code);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedBank || !accountNumber || !accountName) {
-      alert("Please fill in all bank details.");
+      alert("Please ensure bank details are verified before saving.");
       return;
     }
 
@@ -126,6 +193,7 @@ export default function BankAccountModal({
 
     setSaving(true);
     setSuccess(false);
+    setSubaccountError(null);
 
     try {
       const bankData = {
@@ -138,6 +206,8 @@ export default function BankAccountModal({
         updated_at: new Date().toISOString(),
       };
 
+      let savedId = existingId;
+
       if (existingId) {
         const { error } = await supabase
           .from("host_bank_accounts")
@@ -146,19 +216,51 @@ export default function BankAccountModal({
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
           .from("host_bank_accounts")
-          .insert(bankData);
+          .insert(bankData)
+          .select("id")
+          .single();
 
         if (error) throw error;
+        savedId = inserted?.id ?? null;
       }
 
       setSuccess(true);
       if (onSaved) onSaved();
+
+      // Activate Paystack subaccount for automated split payouts
+      if (savedId) {
+        setActivatingPayout(true);
+        setSubaccountError(null);
+        try {
+          // Call secure Next.js API route to create/update subaccount
+          const res = await fetch("/api/paystack/subaccount", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bank_account_id: savedId }),
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || `HTTP ${res.status}`);
+          }
+          setPayoutActivated(true);
+        } catch (fnErr: any) {
+          console.warn("Subaccount setup failed:", fnErr.message);
+          setSubaccountError(
+            "Bank account saved, but automated payout activation failed: " + fnErr.message
+          );
+        } finally {
+          setActivatingPayout(false);
+        }
+      }
+
       setTimeout(() => {
         setSuccess(false);
+        setPayoutActivated(false);
         onClose();
-      }, 1500);
+      }, 2500);
     } catch (err: any) {
       alert("Failed to save bank account: " + err.message);
     } finally {
@@ -209,10 +311,10 @@ export default function BankAccountModal({
           ) : (
             <form onSubmit={handleSave} className="space-y-5">
               {/* Notice */}
-              <div className="flex items-start gap-3 rounded-2xl border border-violet-500/20 bg-violet-500/5 p-3.5">
-                <Building className="h-4 w-4 text-violet-400 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3.5">
+                <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-white/70 leading-relaxed">
-                  Payouts clear automatically to this account once your event concludes. Ensure the account name matches your registered identity.
+                  Automated payouts clear directly to this account daily via Paystack. Account names are verified in real time against official CBN records (standard 1.5% payment gateway processing fees apply at settlement).
                 </p>
               </div>
 
@@ -252,11 +354,7 @@ export default function BankAccountModal({
                           <button
                             key={b.code}
                             type="button"
-                            onClick={() => {
-                              setSelectedBank(b);
-                              setShowBankDropdown(false);
-                              setSearchBankQuery("");
-                            }}
+                            onClick={() => handleBankSelect(b)}
                             className={`w-full flex items-center justify-between p-2.5 text-xs text-left rounded-lg transition ${
                               isSelected
                                 ? "bg-violet-600/20 text-violet-300 font-bold"
@@ -283,44 +381,91 @@ export default function BankAccountModal({
                 <label className="block text-xs font-semibold text-white/60 mb-1.5">
                   Account Number (10 digits) *
                 </label>
-                <input
-                  type="text"
-                  maxLength={10}
-                  required
-                  value={accountNumber}
-                  onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
-                  placeholder="0123456789"
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 text-sm text-white font-mono placeholder-white/20 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition tracking-wider"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    maxLength={10}
+                    required
+                    value={accountNumber}
+                    onChange={(e) => handleAccountNumberChange(e.target.value)}
+                    placeholder="0123456789"
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 text-sm text-white font-mono placeholder-white/20 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition tracking-wider pr-10"
+                  />
+                  {isResolving && (
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-violet-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Account Name */}
+              {/* Account Name & Verification Status */}
               <div>
                 <label className="block text-xs font-semibold text-white/60 mb-1.5">
-                  Account Name *
+                  Verified Account Name *
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={accountName}
-                  onChange={(e) => setAccountName(e.target.value)}
-                  placeholder="Exact account name on bank records"
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition uppercase"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    readOnly
+                    required
+                    value={accountName}
+                    placeholder={
+                      isResolving
+                        ? "Verifying NUBAN with CBN registry..."
+                        : selectedBank && accountNumber.length === 10
+                        ? "Account name will appear here"
+                        : "Enter bank and 10-digit account number"
+                    }
+                    className={`w-full rounded-xl border px-3.5 py-3 text-sm font-medium tracking-wide transition uppercase ${
+                      isResolved
+                        ? "border-emerald-500/40 bg-emerald-500/5 text-emerald-300"
+                        : "border-white/10 bg-white/5 text-white/50"
+                    } outline-none`}
+                  />
+                  {isResolved && (
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-400 flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-300">
+                        Verified ✓
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Warning note */}
-              <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-                <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-amber-300/80 leading-relaxed">
-                  Payouts may be delayed if the bank account name does not match the legal name associated with your host verification.
-                </p>
-              </div>
+              {/* Error if NUBAN resolve failed */}
+              {resolveError && (
+                <div className="flex items-start gap-2 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
+                  {resolveError}
+                </div>
+              )}
 
-              {success && (
+              {success && !activatingPayout && !payoutActivated && (
                 <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl">
                   <CheckCircle2 className="h-4 w-4" />
                   Bank account saved successfully!
+                </div>
+              )}
+
+              {activatingPayout && (
+                <div className="flex items-center gap-2 text-xs font-semibold text-violet-400 bg-violet-500/10 border border-violet-500/20 p-3 rounded-xl">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Activating automated Paystack subaccount...
+                </div>
+              )}
+
+              {payoutActivated && (
+                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Subaccount activated ✓ — 95% ticket revenue routes automatically to your bank!
+                </div>
+              )}
+
+              {subaccountError && (
+                <div className="flex items-start gap-2 text-xs text-amber-300/80 bg-amber-500/5 border border-amber-500/20 p-3 rounded-xl">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  {subaccountError}
                 </div>
               )}
 
@@ -334,16 +479,21 @@ export default function BankAccountModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition shadow-lg shadow-emerald-700/20 disabled:opacity-50"
+                  disabled={saving || activatingPayout || !isResolved || !accountName}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition shadow-lg shadow-emerald-700/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Saving...
                     </>
+                  ) : activatingPayout ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Activating Payouts...
+                    </>
                   ) : (
-                    "Save Bank Account"
+                    "Save & Activate Payouts"
                   )}
                 </button>
               </div>
@@ -354,3 +504,5 @@ export default function BankAccountModal({
     </div>
   );
 }
+
+export default BankAccountModal;

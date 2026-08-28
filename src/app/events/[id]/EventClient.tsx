@@ -1,7 +1,9 @@
 "use client";
+import BroadcastModal from "@/components/BroadcastModal";
 
 import React, { useState, useEffect, useCallback } from "react";
 import Header from "@/components/Header";
+import BankAccountModal from "@/components/BankAccountModal";
 import CustomRegistrationBuilder from "@/components/CustomRegistrationBuilder";
 import UserSearchDropdown from "@/components/UserSearchDropdown";
 import { getOptimizedImageUrl } from "@/lib/media";
@@ -11,6 +13,7 @@ import autoTable from "jspdf-autotable";
 import Papa from "papaparse";
 import {
   ArrowLeft,
+  Megaphone,
   LayoutDashboard,
   DollarSign,
   Eye,
@@ -164,8 +167,25 @@ function guestEmail(t: any): string {
   return t.guest_email || "-";
 }
 
-function tierName(t: any): string {
-  return t.ticket_tiers?.name || t.tier_name || "General";
+function tierName(t: any, tiers?: any[]): string {
+  if (t.ticket_tiers?.name) return t.ticket_tiers.name;
+  if (t.tier_name) return t.tier_name;
+  if (tiers && tiers.length > 0) {
+    const matched = tiers.find((tier: any) => tier.id === t.ticket_tier_id);
+    if (matched) return matched.name;
+    const price = Number(t.purchase_price) || 0;
+    const totalPaid = Number(t.total_paid) || 0;
+    const qty = Number(t.quantity_purchased) || Number(t.quantity) || 1;
+    const unitPrice = price > 0 ? price / qty : totalPaid / qty;
+    const matchedByPrice = tiers.find(
+      (tier: any) =>
+        tier.price > 0 &&
+        (Math.abs(tier.price - unitPrice) < 10 ||
+          Math.abs(tier.price - unitPrice / 1.05) < 100)
+    );
+    if (matchedByPrice) return matchedByPrice.name;
+  }
+  return "General";
 }
 
 export default function EventClient({
@@ -185,6 +205,7 @@ export default function EventClient({
 
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isBankOpen, setIsBankOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -198,6 +219,7 @@ export default function EventClient({
   // concierge inserts in real-time so ticket counts stay accurate without a full reload.
   const [localTickets, setLocalTickets] = useState<any[]>(tickets || []);
   const [showAddTierModal, setShowAddTierModal] = useState(false);
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
 
   const [newTierForm, setNewTierForm] = useState({
     name: "",
@@ -276,6 +298,55 @@ export default function EventClient({
   const [uploadingFlyer, setUploadingFlyer] = useState(false);
   const flyerInputRef = React.useRef<HTMLInputElement>(null);
 
+  // localEarningsLogs mirrors the server-rendered earningsLogs but updates in real-time
+  const [localEarningsLogs, setLocalEarningsLogs] = useState<any[]>(earningsLogs || []);
+
+  // Supabase Realtime: auto-update tickets + revenue when Paystack webhook fires
+  useEffect(() => {
+    const channel = supabase
+      .channel(`event-live-${eventId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "tickets",
+          filter: `party_id=eq.${eventId}`,
+        },
+        (payload) => {
+          const newTicket = payload.new as any;
+          // Only count completed payments
+          if (newTicket.payment_status !== "completed") return;
+          setLocalTickets((prev) => {
+            // Avoid duplicates (idempotency)
+            if (prev.some((t) => t.id === newTicket.id)) return prev;
+            return [newTicket, ...prev];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "host_earnings_logs",
+          filter: `party_id=eq.${eventId}`,
+        },
+        (payload) => {
+          const newLog = payload.new as any;
+          setLocalEarningsLogs((prev) => {
+            if (prev.some((l) => l.id === newLog.id)) return prev;
+            return [newLog, ...prev];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, eventId]);
+
   const eventTitle = party?.title || "Untitled Event";
   const eventDate = party?.date
     ? new Date(party.date).toLocaleDateString("en-US", {
@@ -286,17 +357,23 @@ export default function EventClient({
       })
     : "TBA";
   const eventVenue = party?.location || "TBA";
-  const isLive = isPublished;
+  const rawEventDate = party?.end_date || party?.date;
+  const eventEnd = rawEventDate ? new Date(rawEventDate) : null;
+  const isPast = eventEnd ? eventEnd < new Date() : false;
+  const isLive = isPublished && !isPast;
   const ticketsSold = localTickets.reduce(
     (s: number, t: any) => s + (Number(t.quantity_purchased) || Number(t.quantity) || 1),
     0,
   );
 
   const getTierSoldCount = (tId: string) => {
-    // Always derive from live localTickets; never fall back to stale quantity_sold column
     return localTickets
-      .filter((t: any) => t.ticket_tier_id === tId)
-      .reduce((sum: number, t: any) => sum + (Number(t.quantity_purchased) || Number(t.quantity) || 1), 0);
+      .filter((t: any) => t.ticket_tier_id === tId || t.ticket_tiers?.id === tId)
+      .reduce(
+        (sum: number, t: any) =>
+          sum + (Number(t.quantity_purchased) || Number(t.quantity) || 1),
+        0
+      );
   };
   const ticketCapacity =
     allTiers?.reduce((s: number, t: any) => s + (t.quantity || 0), 0) ||
@@ -307,15 +384,34 @@ export default function EventClient({
     ? `https://thesceneapp.online/${party.slug}`
     : `https://thesceneapp.online/party/${eventId}`;
 
-  // Per-event revenue — sum from earningsLogs for THIS event only (not global hostBalance which spans all events)
-  const totalRevenue =
-    earningsLogs && earningsLogs.length > 0
-      ? earningsLogs.reduce(
-          (s: number, log: any) => s + (log.net_amount || 0),
-          0,
-        )
-      : (tickets?.reduce((s: number, t: any) => s + (t.total_paid || 0), 0) ??
-        0);
+  // Per-event revenue: accurately computes net host revenue from paid tickets only.
+  // Concierge passes are excluded entirely — they are not tracked as revenue.
+  const totalRevenue = localTickets.reduce((sum: number, t: any) => {
+    // Skip concierge passes entirely
+    if ((t.reference || "").toLowerCase().startsWith("concierge_")) return sum;
+    const qty = Number(t.quantity_purchased) || Number(t.quantity) || 1;
+    if (Number(t.purchase_price) > 0) {
+      return sum + Number(t.purchase_price);
+    }
+    const matchedTier = allTiers.find(
+      (tier: any) =>
+        tier.id === t.ticket_tier_id ||
+        tier.id === t.ticket_tiers?.id ||
+        (t.tier_name && tier.name.toLowerCase() === t.tier_name.toLowerCase())
+    );
+    if (matchedTier && matchedTier.price > 0) {
+      return sum + matchedTier.price * qty;
+    }
+    if (Number(t.total_paid) > 0) {
+      return (
+        sum +
+        (Number(t.total_paid) > 3000
+          ? Math.round(Number(t.total_paid) / 1.05)
+          : Number(t.total_paid))
+      );
+    }
+    return sum;
+  }, 0);
   const pendingPayout = hostBalance?.pending_payout ?? 0;
   const recommendedUshers = Math.max(
     1,
@@ -325,13 +421,13 @@ export default function EventClient({
     (usherForm.staffCount || 1) *
     (usherForm.offeredPrice || USHER_PRICE_PER_STAFF);
 
-  const filteredTickets = (tickets || []).filter((t: any) => {
+  const filteredTickets = localTickets.filter((t: any) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
       guestName(t).toLowerCase().includes(q) ||
       guestEmail(t).toLowerCase().includes(q) ||
-      tierName(t).toLowerCase().includes(q)
+      tierName(t, allTiers).toLowerCase().includes(q)
     );
   });
 
@@ -364,19 +460,26 @@ export default function EventClient({
   };
 
   const downloadGuestList = (format: "csv" | "pdf") => {
-    if (!tickets || tickets.length === 0) {
+    if (!localTickets || localTickets.length === 0) {
       alert("No guests found for this event.");
       return;
     }
 
-    const data = tickets.map((t: any) => ({
+    const data = localTickets.map((t: any) => ({
       "Guest Name": guestName(t),
       "Email": guestEmail(t),
-      "Tier / Table": tierName(t),
-      "Quantity": t.quantity_purchased,
-      "Used": t.quantity_used,
-      "Status": t.quantity_used >= t.quantity_purchased ? "Fully Checked-In" : t.quantity_used > 0 ? "Partially Checked-In" : "Valid",
-      "Date": new Date(t.purchased_at).toLocaleDateString(),
+      "Tier / Table": tierName(t, allTiers),
+      "Quantity": t.quantity_purchased || 1,
+      "Used": t.quantity_used || 0,
+      "Status":
+        (t.quantity_used || 0) >= (t.quantity_purchased || 1)
+          ? "Fully Checked-In"
+          : (t.quantity_used || 0) > 0
+            ? "Partially Checked-In"
+            : "Valid",
+      "Date": t.purchased_at
+        ? new Date(t.purchased_at).toLocaleDateString()
+        : "-",
     }));
 
     if (format === "csv") {
@@ -395,23 +498,26 @@ export default function EventClient({
       autoTable(doc, {
         startY: 20,
         head: [["Guest Name", "Email", "Tier", "Qty", "Used", "Status"]],
-        body: data.map(d => [d["Guest Name"], d["Email"], d["Tier / Table"], d["Quantity"], d["Used"], d["Status"]]),
+        body: data.map((d) => [
+          d["Guest Name"],
+          d["Email"],
+          d["Tier / Table"],
+          d["Quantity"],
+          d["Used"],
+          d["Status"],
+        ]),
       });
       doc.save(`${party?.title || "Event"}_GuestList.pdf`);
     }
   };
 
   const downloadEventReport = (format: "csv" | "pdf") => {
-    // Basic overall stats
-    const totalRevenue = (earningsLogs || []).reduce(
-      (sum: number, log: any) => sum + Number(log.amount || 0),
+    const totalTicketsSold = localTickets.reduce(
+      (sum: number, t: any) =>
+        sum + (Number(t.quantity_purchased) || Number(t.quantity) || 1),
       0
     );
-    const totalTicketsSold = (tickets || []).reduce(
-      (sum: number, t: any) => sum + Number(t.quantity_purchased || 0),
-      0
-    );
-    const totalCheckedIn = (tickets || []).reduce(
+    const totalCheckedIn = localTickets.reduce(
       (sum: number, t: any) => sum + Number(t.quantity_used || 0),
       0
     );
@@ -420,14 +526,12 @@ export default function EventClient({
     const tierData = (allTiers || []).map((tier: any) => {
       const sold = getTierSoldCount(tier.id);
       const capacity = tier.quantity || 0;
-      const revenue = (tickets || [])
-        .filter((t: any) => t.ticket_tier_id === tier.id)
-        .reduce((sum: number, t: any) => sum + Number(t.total_paid || 0), 0);
+      const revenue = sold * (tier.price || 0);
       return {
-        "Tier": tier.name,
-        "Type": tier.tier_type === "table" ? "Table" : "Ticket",
-        "Sold": `${sold} / ${capacity}`,
-        "Revenue": revenue,
+        Tier: tier.name,
+        Type: tier.tier_type === "table" ? "Table" : "Ticket",
+        Sold: `${sold} / ${capacity}`,
+        Revenue: revenue,
       };
     });
 
@@ -738,7 +842,8 @@ export default function EventClient({
     }
     setSendingPass(true);
     try {
-      // 1. Insert the complimentary ticket
+      // 1. Insert the ticket with the selected tier's value
+      const tierPrice = Number(selectedTier.price) || 0;
       const { data: ticket, error } = await supabase
         .from("tickets")
         .insert({
@@ -763,16 +868,8 @@ export default function EventClient({
         return;
       }
 
-      // 2. Log a ₦0 host earnings entry for record-keeping (matching TheScene admin behaviour)
-      await supabase.from("host_earnings_logs").insert({
-        host_id: party?.host_id || user?.id,
-        party_id: eventId,
-        ticket_id: ticket.id,
-        amount: 0,
-        fee_amount: 0,
-        net_amount: 0,
-        currency: party?.currency_code || "NGN",
-      });
+      // 2. Log host earnings entry for record-keeping
+      // 2. SKIPPED: We DO NOT insert into host_earnings_logs for concierge
 
       // 3. Send QR ticket email via Supabase Edge Function
       const { error: emailError } = await supabase.functions.invoke(
@@ -791,6 +888,8 @@ export default function EventClient({
             quantity: 1,
             totalPaid: 0,
             currency: party?.currency_code || "NGN",
+            customMessage: conciergeForm.customMessage,
+            isConcierge: true,
           },
         },
       );
@@ -840,7 +939,6 @@ export default function EventClient({
     eventDate,
     eventVenue,
     party,
-    user,
   ]);
 
   const handlePlaceWristbandOrder = () => {
@@ -1027,7 +1125,9 @@ export default function EventClient({
     <div className="h-screen bg-[#080809] flex flex-col font-body overflow-hidden selection:bg-violet-500/30">
       <Header
         organizerName={profile?.full_name || profile?.username || "Host"}
+        avatarUrl={profile?.avatar_url}
         onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        onOpenPayoutSettings={() => setIsBankOpen(true)}
       />
 
       <div className="flex flex-1 overflow-hidden relative">
@@ -1101,15 +1201,17 @@ export default function EventClient({
                 </h1>
                 <span
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider ${
-                    isPublished
+                    isPast
+                      ? "bg-white/10 border-white/15 text-white/50"
+                      : isPublished
                       ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
                       : "bg-amber-500/10 border-amber-500/30 text-amber-300"
                   }`}
                 >
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${isPublished ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}
+                    className={`h-1.5 w-1.5 rounded-full ${isPast ? "bg-white/40" : isPublished ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}
                   />
-                  {isPublished ? "Live & Selling" : "Draft"}
+                  {isPast ? "Ended" : isPublished ? "Live & Selling" : "Draft"}
                 </span>
               </div>
               <p className="text-xs text-white/50 mt-1">
@@ -1118,6 +1220,14 @@ export default function EventClient({
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowBroadcastModal(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-600/20 px-4 py-2.5 text-xs font-extrabold text-violet-300 hover:bg-violet-600/30 transition shadow-lg"
+              >
+                <Megaphone className="h-3.5 w-3.5 text-violet-400" />
+                <span>Announcement</span>
+              </button>
+
               <button
                 onClick={togglePublishStatus}
                 disabled={updatingPublish}
@@ -1206,7 +1316,7 @@ export default function EventClient({
               {/* Restore original 2-column Dashboard layout */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Recent Orders table */}
-                <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-[#0e0e11] p-6 shadow-xl">
+                <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-[#0e0e11] p-4 sm:p-6 shadow-xl">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="font-heading text-base font-extrabold text-white">
                       Recent Orders
@@ -1218,8 +1328,9 @@ export default function EventClient({
                       View all &rarr;
                     </button>
                   </div>
-                  {tickets && tickets.length > 0 ? (
-                    <table className="w-full text-left text-xs">
+                  {localTickets && localTickets.length > 0 ? (
+                    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                      <table className="w-full text-left text-xs min-w-[480px]">
                       <thead>
                         <tr className="border-b border-white/10 text-[10px] font-extrabold uppercase tracking-wider text-white/30">
                           <th className="pb-4 pr-4">Attendee</th>
@@ -1229,7 +1340,7 @@ export default function EventClient({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5 text-sm">
-                        {tickets.slice(0, 5).map((t: any) => (
+                        {localTickets.slice(0, 5).map((t: any) => (
                           <tr key={t.id}>
                             <td className="py-4 pr-4">
                               <div className="flex items-center gap-3">
@@ -1248,11 +1359,13 @@ export default function EventClient({
                             </td>
                             <td className="py-4 px-4">
                               <span className="inline-flex rounded bg-violet-500/20 px-2 py-1 text-[10px] font-bold text-violet-400">
-                                {tierName(t)}
+                                {tierName(t, allTiers)}
                               </span>
                             </td>
                             <td className="py-4 px-4 font-bold text-white text-xs">
-                              {fmt(t.total_paid || 0)}
+                              {(t.reference || "").toLowerCase().startsWith("concierge_") ? (
+                                <span className="text-violet-400 font-extrabold uppercase text-[10px] tracking-wide">Concierge</span>
+                              ) : fmt(t.total_paid || 0)}
                             </td>
                             <td className="py-4 pl-4 text-white/50 text-xs">
                               {t.purchased_at
@@ -1263,6 +1376,7 @@ export default function EventClient({
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                       <Ticket className="h-10 w-10 text-white/10 mb-3" />
@@ -1407,22 +1521,22 @@ export default function EventClient({
               {/* Revenue History Log - Now shows buyer details and ticket tier purchased */}
               <div className="space-y-4">
                 <h3 className="text-sm font-bold text-white">
-                  Revenue History ({tickets.length})
+                  Revenue History ({localTickets.length})
                 </h3>
-                {tickets.length > 0 ? (
-                  <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-hidden shadow-xl">
-                    <table className="w-full text-left text-xs">
+                {localTickets.length > 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-x-auto shadow-xl">
+                    <table className="w-full text-left text-xs min-w-[620px]">
                       <thead className="border-b border-white/10 bg-white/5 text-[#8E8D9A]">
                         <tr>
-                          <th className="p-4">Date</th>
-                          <th className="p-4">Buyer / Guest</th>
-                          <th className="p-4">Tier Purchased</th>
-                          <th className="p-4">Gross Amount</th>
-                          <th className="p-4">Net Payout</th>
+                          <th className="p-4 whitespace-nowrap">Date</th>
+                          <th className="p-4 whitespace-nowrap">Buyer / Guest</th>
+                          <th className="p-4 whitespace-nowrap">Tier Purchased</th>
+                          <th className="p-4 whitespace-nowrap">Gross Amount</th>
+                          <th className="p-4 whitespace-nowrap">Net Payout</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {tickets.map((t: any) => (
+                        {localTickets.map((t: any) => (
                           <tr key={t.id} className="hover:bg-white/[0.02]">
                             <td className="p-4 text-white/70">
                               {new Date(
@@ -1441,14 +1555,32 @@ export default function EventClient({
                             </td>
                             <td className="p-4 text-white/70">
                               <span className="inline-flex rounded bg-white/5 border border-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/70">
-                                {tierName(t)}
+                                {tierName(t, allTiers)}
                               </span>
                             </td>
                             <td className="p-4 font-bold text-white">
-                              {fmt(t.total_paid || 0)}
+                              {(t.reference || "").toLowerCase().startsWith("concierge_") ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                                  Concierge
+                                </span>
+                              ) : fmt(t.total_paid || 0)}
                             </td>
                             <td className="p-4 font-bold text-emerald-400">
-                              {fmt((t.total_paid || 0) * 0.95)}
+                              {(t.reference || "").toLowerCase().startsWith("concierge_") ? (
+                                <span className="text-white/30 font-normal text-xs">-</span>
+                              ) : fmt(
+                                Number(t.purchase_price) > 0
+                                  ? Number(t.purchase_price)
+                                  : (allTiers.find(
+                                      (tier: any) =>
+                                        tier.id === t.ticket_tier_id ||
+                                        tier.id === t.ticket_tiers?.id
+                                    )?.price || 0) *
+                                      (Number(t.quantity_purchased) || 1) ||
+                                    (Number(t.total_paid) > 3000
+                                      ? Math.round(Number(t.total_paid) / 1.05)
+                                      : Number(t.total_paid) || 0)
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -2015,7 +2147,7 @@ export default function EventClient({
 
           {activeTab === "orders" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
                 <h2 className="font-heading text-xl font-black text-white">
                   Orders ({filteredTickets.length})
                 </h2>
@@ -2024,37 +2156,56 @@ export default function EventClient({
                   placeholder="Search buyer name or email..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="rounded-xl border border-white/10 bg-[#141418] px-4 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500 transition w-64"
+                  className="rounded-xl border border-white/10 bg-[#141418] px-4 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-violet-500 transition w-full sm:w-64"
                 />
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-hidden shadow-xl">
-                <table className="w-full text-left text-xs">
+              <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-x-auto shadow-xl">
+                <table className="w-full text-left text-xs min-w-[560px]">
                   <thead className="border-b border-white/10 bg-white/5 text-[#8E8D9A]">
                     <tr>
-                      <th className="p-4">Buyer</th>
-                      <th className="p-4">Tier</th>
-                      <th className="p-4">Amount Paid</th>
-                      <th className="p-4">Status</th>
+                      <th className="p-4 whitespace-nowrap">Buyer</th>
+                      <th className="p-4 whitespace-nowrap">Tier</th>
+                      <th className="p-4 whitespace-nowrap">Amount Paid</th>
+                      <th className="p-4 whitespace-nowrap">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {filteredTickets.map((t: any) => (
                       <tr key={t.id} className="hover:bg-white/[0.02]">
-                        <td className="p-4 font-bold text-white">
-                          {guestName(t)}{" "}
+                        <td className="p-4 font-bold text-white whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {guestName(t)}
+                            {(t.reference || "").toLowerCase().startsWith("concierge_") && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                                Concierge
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[11px] font-normal text-white/40">
                             {guestEmail(t)}
                           </div>
                         </td>
-                        <td className="p-4 text-white/70">{tierName(t)}</td>
-                        <td className="p-4 font-bold text-violet-400">
-                          {t.total_paid === 0 ? "Free" : fmt(t.total_paid)}
+                        <td className="p-4 text-white/70 whitespace-nowrap">{tierName(t, allTiers)}</td>
+                        <td className="p-4 font-bold whitespace-nowrap">
+                          {(t.reference || "").toLowerCase().startsWith("concierge_") ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                              Concierge
+                            </span>
+                          ) : (
+                            <span className="text-violet-400 font-bold">{fmt(t.total_paid || 0)}</span>
+                          )}
                         </td>
-                        <td className="p-4">
-                          <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-bold text-emerald-300 uppercase">
-                            Paid
-                          </span>
+                        <td className="p-4 whitespace-nowrap">
+                          {(t.reference || "").toLowerCase().startsWith("concierge_") ? (
+                            <span className="rounded-full bg-violet-500/20 border border-violet-500/30 px-2.5 py-1 text-[10px] font-bold text-violet-300 uppercase">
+                              Concierge
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-emerald-500/20 px-2.5 py-1 text-[10px] font-bold text-emerald-300 uppercase">
+                              Paid
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -2068,7 +2219,7 @@ export default function EventClient({
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="font-heading text-xl font-black text-white">
-                  Guest Roster ({tickets.length})
+                  Guest Roster ({localTickets.length})
                 </h2>
                 <div className="flex gap-2">
                   <button onClick={() => downloadGuestList("csv")} className="text-[10px] font-bold uppercase tracking-wider text-white/70 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition">Export CSV</button>
@@ -2076,7 +2227,7 @@ export default function EventClient({
                 </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-[#0e0e11] p-6 shadow-xl space-y-3">
-                {tickets.map((t: any) => (
+                {localTickets.map((t: any) => (
                   <div
                     key={t.id}
                     className="flex items-center justify-between p-3.5 rounded-xl bg-white/5 border border-white/10 animate-fade-in"
@@ -2089,10 +2240,15 @@ export default function EventClient({
                         {guestEmail(t)}
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-white/60">
-                        {tierName(t)}
+                        {tierName(t, allTiers)}
                       </span>
+                      {(t.reference || "").toLowerCase().startsWith("concierge_") && (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                          Concierge
+                        </span>
+                      )}
                       <span
                         className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
                           t.quantity_used > 0
@@ -2282,14 +2438,14 @@ export default function EventClient({
                   Dispatched VIP Passes ({sentPasses.length})
                 </h3>
                 {sentPasses.length > 0 ? (
-                  <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-hidden shadow-xl">
-                    <table className="w-full text-left text-xs">
+                  <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-x-auto shadow-xl">
+                    <table className="w-full text-left text-xs min-w-[500px]">
                       <thead className="border-b border-white/10 bg-white/5 text-[#8E8D9A]">
                         <tr>
-                          <th className="p-4">Recipient</th>
-                          <th className="p-4">Tier</th>
-                          <th className="p-4">Sent Date</th>
-                          <th className="p-4">Status</th>
+                          <th className="p-4 whitespace-nowrap">Recipient</th>
+                          <th className="p-4 whitespace-nowrap">Tier</th>
+                          <th className="p-4 whitespace-nowrap">Sent Date</th>
+                          <th className="p-4 whitespace-nowrap">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
@@ -2547,15 +2703,15 @@ export default function EventClient({
                   Staffing Requests History ({usherRequests.length})
                 </h3>
                 {usherRequests.length > 0 ? (
-                  <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-hidden shadow-xl">
-                    <table className="w-full text-left text-xs">
+                  <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-x-auto shadow-xl">
+                    <table className="w-full text-left text-xs min-w-[520px]">
                       <thead className="border-b border-white/10 bg-white/5 text-[#8E8D9A]">
                         <tr>
-                          <th className="p-4">Date</th>
-                          <th className="p-4">Ushers</th>
-                          <th className="p-4">Offered Rate</th>
-                          <th className="p-4">Total</th>
-                          <th className="p-4">Status</th>
+                          <th className="p-4 whitespace-nowrap">Date</th>
+                          <th className="p-4 whitespace-nowrap">Ushers</th>
+                          <th className="p-4 whitespace-nowrap">Offered Rate</th>
+                          <th className="p-4 whitespace-nowrap">Total</th>
+                          <th className="p-4 whitespace-nowrap">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
@@ -2971,6 +3127,22 @@ export default function EventClient({
           )}
         </main>
       </div>
+    
+      {/* BROADCAST ANNOUNCEMENT MODAL */}
+      <BroadcastModal
+        isOpen={showBroadcastModal}
+        onClose={() => setShowBroadcastModal(false)}
+        party={party}
+        totalAttendees={localTickets.length}
+        hostName={profile?.full_name || profile?.username || "The Host"}
+      />
+
+
+      <BankAccountModal
+        isOpen={isBankOpen}
+        onClose={() => setIsBankOpen(false)}
+        user={user}
+      />
     </div>
   );
 }

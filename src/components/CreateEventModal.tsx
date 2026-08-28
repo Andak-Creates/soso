@@ -61,8 +61,8 @@ interface TicketTierInput {
   isLimitOn: boolean;
   tier_type: "ticket" | "table" | "group";
   tableCapacity?: string; // seats per table / group size (e.g. "5")
-  description?: string;  // optional display description
-  app_only?: boolean;    // if true, only purchasable via TheScene app
+  description?: string; // optional display description
+  app_only?: boolean; // if true, only purchasable via TheScene app
 }
 
 // Unsigned Cloudinary upload helper using shared keys
@@ -172,34 +172,37 @@ export default function CreateEventModal({
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  const loadHostProfiles = useCallback(async (showRefreshing = false) => {
-    if (showRefreshing) setRefreshingProfiles(true);
-    else setLoadingProfiles(true);
+  const loadHostProfiles = useCallback(
+    async (showRefreshing = false) => {
+      if (showRefreshing) setRefreshingProfiles(true);
+      else setLoadingProfiles(true);
 
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
 
-      const { data: profiles, error: profileError } = await supabase
-        .from("host_profiles")
-        .select("*")
-        .eq("owner_id", user.id);
+        const { data: profiles, error: profileError } = await supabase
+          .from("host_profiles")
+          .select("*")
+          .eq("owner_id", user.id);
 
-      if (profileError) throw profileError;
+        if (profileError) throw profileError;
 
-      if (profiles && profiles.length > 0) {
-        setHostProfiles(profiles);
-        setSelectedHostProfile(profiles[0].id);
+        if (profiles && profiles.length > 0) {
+          setHostProfiles(profiles);
+          setSelectedHostProfile(profiles[0].id);
+        }
+      } catch (err: any) {
+        console.error("Failed to fetch host profiles:", err);
+      } finally {
+        setLoadingProfiles(false);
+        setRefreshingProfiles(false);
       }
-    } catch (err: any) {
-      console.error("Failed to fetch host profiles:", err);
-    } finally {
-      setLoadingProfiles(false);
-      setRefreshingProfiles(false);
-    }
-  }, [supabase]);
+    },
+    [supabase],
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -424,7 +427,11 @@ export default function CreateEventModal({
           return false;
         }
         if (tier.tier_type === "table" || tier.tier_type === "group") {
-          if (!tier.tableCapacity || !tier.tableCapacity.trim() || isNaN(Number(tier.tableCapacity))) {
+          if (
+            !tier.tableCapacity ||
+            !tier.tableCapacity.trim() ||
+            isNaN(Number(tier.tableCapacity))
+          ) {
             setError(
               tier.tier_type === "group"
                 ? "Please specify group size (e.g. 4 people per group pass)"
@@ -566,7 +573,7 @@ export default function CreateEventModal({
           party_id: party.id,
           name: tier.name.trim(),
           table_capacity:
-            (tier.tier_type === "table" || tier.tier_type === "group")
+            tier.tier_type === "table" || tier.tier_type === "group"
               ? parseInt(tier.tableCapacity || "0") || null
               : null,
           price: Number(tier.price || 0),
@@ -707,7 +714,10 @@ export default function CreateEventModal({
         </header>
 
         {/* Scrollable Form Body */}
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-6 py-8 md:px-12 max-w-4xl w-full mx-auto space-y-6">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto px-6 py-8 md:px-12 max-w-4xl w-full mx-auto space-y-6"
+        >
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start gap-3">
               <Info className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
@@ -964,7 +974,8 @@ export default function CreateEventModal({
                     </span>
                   </div>
                   <div className="text-[11px] text-white/40 mt-0.5">
-                    Private events won't show on TheScene browse page. Only people with the direct link can see it.
+                    Private events won't show on TheScene browse page. Only
+                    people with the direct link can see it.
                   </div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -1140,7 +1151,17 @@ export default function CreateEventModal({
                       <option value="Other">Other</option>
                     </select>
                     <input
-                      placeholder={communityPlatform.toLowerCase() === "whatsapp" ? "https://chat.whatsapp.com/..." : communityPlatform.toLowerCase() === "telegram" ? "https://t.me/..." : communityPlatform.toLowerCase() === "snapchat" ? "https://snapchat.com/add/..." : communityPlatform.toLowerCase() === "discord" ? "https://discord.gg/..." : "https://..."}
+                      placeholder={
+                        communityPlatform.toLowerCase() === "whatsapp"
+                          ? "https://chat.whatsapp.com/..."
+                          : communityPlatform.toLowerCase() === "telegram"
+                            ? "https://t.me/..."
+                            : communityPlatform.toLowerCase() === "snapchat"
+                              ? "https://snapchat.com/add/..."
+                              : communityPlatform.toLowerCase() === "discord"
+                                ? "https://discord.gg/..."
+                                : "https://..."
+                      }
                       value={communityLink}
                       onChange={(e) => setCommunityLink(e.target.value)}
                       className="flex-1 rounded-xl border border-white/10 bg-[#141418] px-4 py-2.5 text-xs text-white placeholder-white/20 outline-none focus:border-violet-500 transition"
@@ -1313,7 +1334,7 @@ export default function CreateEventModal({
           {/* STEP 4: TICKETS & TABLES */}
           {step === 4 && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col md:flex-row gap-4 md:gap-0 items-center justify-between">
                 <div>
                   <h3 className="font-heading text-2xl font-black text-white tracking-tight">
                     Tickets & Tables
@@ -1357,8 +1378,8 @@ export default function CreateEventModal({
                       tier.tier_type === "table"
                         ? "border-violet-500/25 border-l-4 border-l-violet-600"
                         : tier.tier_type === "group"
-                        ? "border-fuchsia-500/25 border-l-4 border-l-fuchsia-500"
-                        : "border-white/10"
+                          ? "border-fuchsia-500/25 border-l-4 border-l-fuchsia-500"
+                          : "border-white/10"
                     }`}
                   >
                     {/* Header badge & delete */}
@@ -1369,13 +1390,17 @@ export default function CreateEventModal({
                             tier.tier_type === "table"
                               ? "bg-violet-500/20 text-violet-300"
                               : tier.tier_type === "group"
-                              ? "bg-fuchsia-500/20 text-fuchsia-300"
-                              : "bg-white/10 text-white/50"
+                                ? "bg-fuchsia-500/20 text-fuchsia-300"
+                                : "bg-white/10 text-white/50"
                           }`}
                         >
-                          {tier.tier_type === "table" ? "🪑 Table" : tier.tier_type === "group" ? "👥 Group Pass" : "🎟 Ticket Tier"}
+                          {tier.tier_type === "table"
+                            ? "🪑 Table"
+                            : tier.tier_type === "group"
+                              ? "👥 Group Pass"
+                              : "🎟 Ticket Tier"}
                         </span>
-                        {(tier.app_only) && (
+                        {tier.app_only && (
                           <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-blue-500/20 text-blue-300 border border-blue-500/30">
                             App Only
                           </span>
@@ -1448,13 +1473,18 @@ export default function CreateEventModal({
 
                     {/* Table/Group seats / Max per order fields */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                      {(tier.tier_type === "table" || tier.tier_type === "group") ? (
+                      {tier.tier_type === "table" ||
+                      tier.tier_type === "group" ? (
                         <div>
                           <label className="block text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1.5">
-                            {tier.tier_type === "group" ? "People per Group Pass *" : "Guests Capacity per Table *"}
+                            {tier.tier_type === "group"
+                              ? "People per Group Pass *"
+                              : "Guests Capacity per Table *"}
                           </label>
                           <input
-                            placeholder={tier.tier_type === "group" ? "e.g. 4" : "e.g. 5"}
+                            placeholder={
+                              tier.tier_type === "group" ? "e.g. 4" : "e.g. 5"
+                            }
                             type="number"
                             min="2"
                             value={tier.tableCapacity || ""}
@@ -1521,14 +1551,25 @@ export default function CreateEventModal({
                     {/* App Only Toggle */}
                     <div className="flex items-center justify-between rounded-xl bg-blue-500/5 border border-blue-500/20 px-4 py-3">
                       <div>
-                        <div className="text-xs font-bold text-white">TheScene App Exclusive</div>
-                        <div className="text-[10px] text-white/40 mt-0.5">Only visible and purchasable via the TheScene mobile app.</div>
+                        <div className="text-xs font-bold text-white">
+                          TheScene App Exclusive
+                        </div>
+                        <div className="text-[10px] text-white/40 mt-0.5">
+                          Only visible and purchasable via the TheScene mobile
+                          app.
+                        </div>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer shrink-0">
                         <input
                           type="checkbox"
                           checked={tier.app_only ?? false}
-                          onChange={(e) => updateTicketTier(tier.id, "app_only", e.target.checked)}
+                          onChange={(e) =>
+                            updateTicketTier(
+                              tier.id,
+                              "app_only",
+                              e.target.checked,
+                            )
+                          }
                           className="sr-only peer"
                         />
                         <div className="w-9 h-5 bg-white/20 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
@@ -1569,7 +1610,7 @@ export default function CreateEventModal({
                       Absorb platform service fees (5%)?
                     </div>
                     <div className="text-[11px] text-white/40 mt-0.5">
-                      ON covers fees out of payouts. OFF passes fees to buyers.
+                      ON: Host covers the 5% platform fee. OFF: 5% fee is paid by buyers at checkout (standard 1.5% gateway fees apply to payout settlements).
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -1626,8 +1667,8 @@ export default function CreateEventModal({
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="grid grid-col md:grid-col-2 gap-4 text-xs">
+                    <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-white/5 border border-white/10">
                       <Calendar className="h-4.5 w-4.5 text-violet-400 shrink-0 mt-0.5" />
                       <div>
                         <span className="font-bold text-white block">
@@ -1641,7 +1682,7 @@ export default function CreateEventModal({
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-white/5 border border-white/10">
                       <MapPin className="h-4.5 w-4.5 text-fuchsia-400 shrink-0 mt-0.5" />
                       <div>
                         <span className="font-bold text-white block">
