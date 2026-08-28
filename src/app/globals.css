@@ -60,13 +60,17 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Use dvh so iOS Safari browser chrome hides naturally when scrolling */
+    height: 100%;
   }
 
   body {
     background-color: #f4f6fa;
     color: #0f172a;
     font-family: 'Inter', -apple-system, sans-serif;
-    min-height: 100vh;
+    min-height: 100dvh;
+    /* Prevent inherited smooth-scroll from causing delayed iOS scroll response */
+    scroll-behavior: auto;
   }
 
   ::-webkit-scrollbar {

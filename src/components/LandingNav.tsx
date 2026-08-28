@@ -53,7 +53,7 @@ export default function LandingNav({
             authLink && (
               <Link
                 href={authLink.href}
-                className="text-xs text-white/50 hover:text-white transition"
+                className="text-xs text-white/50 hover:text-white transition pr-2"
               >
                 {authLink.label}{" "}
                 <span className="text-violet-400 font-semibold">
@@ -62,88 +62,24 @@ export default function LandingNav({
               </Link>
             )
           ) : (
-            /* Full landing nav */
-            <>
-              {/* Desktop links */}
-              <div className="hidden md:flex items-center gap-1 bg-white/5 rounded-full p-1 border border-white/5">
-                {[
-                  ["Features", "#features"],
-                  ["How it Works", "#how-it-works"],
-                ].map(([label, href]) => (
-                  <a
-                    key={label}
-                    href={href}
-                    className="px-4 py-2 text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 rounded-full transition-all"
-                  >
-                    {label}
-                  </a>
-                ))}
-              </div>
-
-              {/* CTA */}
-              <div className="hidden md:flex items-center gap-3 pr-1">
-                <Link
-                  href="/auth/login"
-                  className="text-sm font-bold text-white/70 hover:text-white transition px-4"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/auth/signup"
-                  className="inline-flex items-center justify-center h-10 px-5 rounded-full bg-white text-black text-sm font-bold hover:bg-white/90 transition-transform hover:scale-105 active:scale-95"
-                >
-                  Get Started
-                </Link>
-              </div>
-
-              {/* Mobile toggle */}
-              <button
-                className="md:hidden flex items-center justify-center h-10 w-10 rounded-full bg-white/10 text-white mr-1"
-                onClick={() => setMobileOpen(!mobileOpen)}
+            /* Clean landing nav: Brand + Action Buttons */
+            <div className="flex items-center gap-2 sm:gap-4 pr-1">
+              <Link
+                href="/auth/login"
+                className="text-xs sm:text-sm font-bold text-white/70 hover:text-white transition px-2 sm:px-4 py-2"
               >
-                {mobileOpen ? (
-                  <X className="h-5 w-5" />
-                ) : (
-                  <Menu className="h-5 w-5" />
-                )}
-              </button>
-            </>
+                Sign In
+              </Link>
+              <Link
+                href="/auth/signup"
+                className="inline-flex items-center justify-center h-9 sm:h-10 px-4 sm:px-5 rounded-full bg-white text-black text-xs sm:text-sm font-bold hover:bg-white/90 transition-transform hover:scale-105 active:scale-95 shadow-lg shadow-white/10"
+              >
+                Get Started
+              </Link>
+            </div>
           )}
         </nav>
       </header>
-
-      {/* Mobile overlay */}
-      {!authMode && mobileOpen && (
-        <div className="fixed inset-0 z-40 bg-[#08090A] pt-28 px-6 flex flex-col">
-          <div className="flex flex-col gap-6 text-3xl font-heading font-bold text-white">
-            <a href="#features" onClick={() => setMobileOpen(false)}>
-              Features
-            </a>
-            <a href="#how-it-works" onClick={() => setMobileOpen(false)}>
-              How it Works
-            </a>
-            <a href="#pricing" onClick={() => setMobileOpen(false)}>
-              Pricing
-            </a>
-          </div>
-          <div className="mt-auto pb-12 flex flex-col gap-4">
-            <Link
-              href="/auth/login"
-              className="py-4 text-center text-lg font-bold border border-white/20 rounded-2xl text-white"
-              onClick={() => setMobileOpen(false)}
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/auth/signup"
-              className="py-4 text-center text-lg font-bold bg-white text-black rounded-2xl"
-              onClick={() => setMobileOpen(false)}
-            >
-              Get Started Free
-            </Link>
-          </div>
-        </div>
-      )}
     </>
   );
 }

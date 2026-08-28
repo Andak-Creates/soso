@@ -13,99 +13,6 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-/* ── updated dashboard preview matching screenshot-1 ── */
-function DashboardPreview() {
-  const events = [
-    {
-      name: "Neon Mirage",
-      sold: 112,
-      cap: 150,
-      pct: 74,
-      img: "photo-1514525253161-7a46d19cd819",
-    },
-    {
-      name: "Lagos Vibes X",
-      sold: 340,
-      cap: 400,
-      pct: 85,
-      img: "photo-1492684223066-81342ee5ff30",
-    },
-    { name: "Decked Night", sold: 0, cap: 80, pct: 0, img: "" },
-  ];
-
-  return (
-    <div className="w-full max-w-5xl mx-auto rounded-3xl bg-[#0a0a0c] border border-white/5 p-6 md:p-10 shadow-2xl shadow-black/80">
-      {/* Top Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div className="rounded-2xl bg-[#111113] border border-white/5 p-5">
-          <div className="font-heading text-3xl font-black text-[#a78bfa] mb-1 tracking-tight">
-            ₦ 4.2M
-          </div>
-          <div className="text-xs font-bold text-emerald-400">+22%</div>
-        </div>
-        <div className="rounded-2xl bg-[#111113] border border-white/5 p-5">
-          <div className="font-heading text-3xl font-black text-white mb-1 tracking-tight">
-            847
-          </div>
-          <div className="text-xs font-bold text-emerald-400">+18%</div>
-        </div>
-        <div className="rounded-2xl bg-[#111113] border border-white/5 p-5">
-          <div className="font-heading text-3xl font-black text-emerald-400 mb-1 tracking-tight">
-            ₦ 2.8M
-          </div>
-          <div className="text-xs font-bold text-white/30">06:00 AM</div>
-        </div>
-      </div>
-
-      {/* Events List */}
-      <div className="rounded-3xl bg-[#111113] border border-white/5 p-6">
-        <div className="text-[11px] font-bold text-white/40 tracking-wider mb-6">
-          MY EVENTS
-        </div>
-
-        <div className="flex flex-col gap-4">
-          {events.map((ev, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-4 rounded-2xl bg-[#151518] border border-white/5 p-4"
-            >
-              <div
-                className="h-12 w-12 rounded-full bg-white/10 shrink-0 bg-cover bg-center"
-                style={
-                  ev.img
-                    ? {
-                        backgroundImage: `url('https://images.unsplash.com/${ev.img}?q=80&w=150')`,
-                      }
-                    : undefined
-                }
-              />
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-white text-sm truncate">
-                    {ev.name}
-                  </span>
-                  <span className="text-[11px] text-white/40 font-medium shrink-0">
-                    {ev.sold}/{ev.cap}
-                  </span>
-                </div>
-                {/* Progress bar matching the screenshot */}
-                <div className="h-1.5 w-full bg-[#1e1e24] rounded-full overflow-hidden">
-                  {ev.pct > 0 && (
-                    <div
-                      className="h-full rounded-full bg-violet-500"
-                      style={{ width: `${ev.pct}%` }}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── discovery showcase section: Bhind events surface on TheScene ── */
 function DiscoverSection() {
   const flyers = [
@@ -134,8 +41,13 @@ function DiscoverSection() {
       <div className="mx-auto max-w-7xl px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
         {/* ── copy ── */}
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/5 px-4 py-1.5 text-xs font-semibold text-violet-300/80 mb-8 backdrop-blur-md">
-            Synced with TheScene
+          <div className="inline-flex items-center gap-2.5 text-sm sm:text-base font-semibold text-white/70 mb-8">
+            <span className="text-white/60">Synced with</span>
+            <img
+              src="/thescenne-logo-transparent.png"
+              alt="TheScene"
+              className="h-5 sm:h-6 w-auto object-contain brightness-125 inline-block"
+            />
           </div>
 
           <h2 className="font-heading text-4xl md:text-5xl font-black leading-tight tracking-tight text-white mb-6">
@@ -170,10 +82,10 @@ function DiscoverSection() {
         <div className="relative h-[600px] flex items-center justify-center">
           {/* flyer card ahead, left */}
           <div
-            className={`group absolute left-0 top-8 w-60 z-30 ${flyers[0].rotate} ${flyers[0].hoverRotate} hover:-translate-y-2 hover:scale-105 transition-all duration-300 ease-out rounded-[1.75rem] bg-[#111113] border border-white/10 p-2 shadow-2xl shadow-black/60 hover:shadow-violet-500/20 cursor-pointer`}
+            className={`group absolute left-0 top-8 w-40 md:w-60 z-30 ${flyers[0].rotate} ${flyers[0].hoverRotate} hover:-translate-y-2 hover:scale-105 transition-all duration-300 ease-out rounded-[1.75rem] bg-[#111113] border border-white/10 p-2 shadow-2xl shadow-black/60 hover:shadow-violet-500/20 cursor-pointer`}
           >
             <div
-              className="h-52 w-full rounded-[1.4rem] bg-cover bg-center bg-white/10 overflow-hidden relative"
+              className="h-40 md:h-52 w-full rounded-[1.4rem] bg-cover bg-center bg-white/10 overflow-hidden relative"
               style={{
                 backgroundImage: `url('${flyers[0].img}')`,
               }}
@@ -192,10 +104,10 @@ function DiscoverSection() {
 
           {/* flyer card ahead, right */}
           <div
-            className={`group absolute right-0 bottom-10 w-60 z-30 ${flyers[1].rotate} ${flyers[1].hoverRotate} hover:-translate-y-2 hover:scale-105 transition-all duration-300 ease-out rounded-[1.75rem] bg-[#111113] border border-white/10 p-2 shadow-2xl shadow-black/60 hover:shadow-violet-500/20 cursor-pointer`}
+            className={`group absolute right-0 bottom-10 w-40 md:w-60 z-30 ${flyers[1].rotate} ${flyers[1].hoverRotate} hover:-translate-y-2 hover:scale-105 transition-all duration-300 ease-out rounded-[1.75rem] bg-[#111113] border border-white/10 p-2 shadow-2xl shadow-black/60 hover:shadow-violet-500/20 cursor-pointer`}
           >
             <div
-              className="h-44 w-full rounded-[1.2rem] bg-cover bg-center bg-white/10 overflow-hidden relative"
+              className="h-40 md:h-44 w-full rounded-[1.2rem] bg-cover bg-center bg-white/10 overflow-hidden relative"
               style={{
                 backgroundImage: `url('${flyers[1].img}')`,
               }}
@@ -261,8 +173,13 @@ export default function LandingPage() {
         </div>
 
         <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center flex flex-col items-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/5 px-4 py-1.5 text-xs font-semibold text-violet-300/80 mb-8 backdrop-blur-md">
-            Powered by TheScene
+          <div className="inline-flex items-center gap-2.5 text-sm sm:text-base font-semibold text-white/70 mb-8">
+            <span className="text-white/60">Built for</span>
+            <img
+              src="/thescenne-logo-transparent.png"
+              alt="TheScene"
+              className="h-6 sm:h-7 w-auto object-contain brightness-125 inline-block"
+            />
           </div>
 
           <h1 className="font-heading text-4xl md:text-6xl font-black leading-tight tracking-tight mb-6">
@@ -292,11 +209,6 @@ export default function LandingPage() {
               Sign In
             </Link>
           </div>
-        </div>
-
-        {/* Dashboard Preview */}
-        <div className="w-full px-4">
-          <DashboardPreview />
         </div>
       </section>
 
@@ -376,7 +288,14 @@ export default function LandingPage() {
             <span className="font-brand text-xl text-white tracking-widest">
               Bhind.
             </span>
-            <span className="text-white/20 text-xs">Powered by TheScene</span>
+            <div className="text-white/40 text-xs flex items-center gap-1.5 border-l border-white/10 pl-3">
+              <span>Powered by</span>
+              <img
+                src="/thescenne-logo-transparent.png"
+                alt="TheScene"
+                className="h-4 w-auto object-contain brightness-125 opacity-80 inline-block"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-6 text-sm text-white/30">

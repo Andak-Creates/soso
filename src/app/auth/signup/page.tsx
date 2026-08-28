@@ -2,70 +2,97 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Eye, EyeOff, ArrowRight, CheckCircle2 } from 'lucide-react';
-
+import { Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import LandingNav from '@/components/LandingNav';
 
 export default function SignupPage() {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [orgName, setOrgName] = useState('');
-  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const handleStep1 = (e: React.FormEvent) => {
-    e.preventDefault();
-    setStep(2);
-  };
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage(null);
+
+    if (password.length < 8) {
+      setErrorMessage('Password must be at least 8 characters long.');
+      setLoading(false);
+      return;
+    }
     
-    const { createClient } = await import('@/lib/supabase/client');
-    const supabase = createClient();
-    
-    // Sign up with Supabase Auth
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: orgName,
-          phone: phone,
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      
+      // Clean username to satisfy schema: alphanumeric, 3 to 30 characters, unique
+      const baseCleanName = fullName.trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'host';
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      const cleanUsername = `${baseCleanName}${randomSuffix}`.slice(0, 30);
+
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            full_name: fullName.trim(),
+            username: cleanUsername,
+            is_host: true,
+          }
+        }
+      });
+      
+      if (error) {
+        setErrorMessage(error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (data?.user) {
+        const userId = data.user.id;
+        const brandName = fullName.trim();
+
+        // 1. Auto-create their default Host Profile so they can immediately create events
+        try {
+          await supabase.from('host_profiles').insert({
+            owner_id: userId,
+            name: brandName,
+            is_verified: false,
+          });
+        } catch (profileErr) {
+          console.warn('Host profile auto-creation notice:', profileErr);
+        }
+
+        // 2. Auto-initialize their host balances
+        try {
+          await supabase.from('host_balances').insert({
+            user_id: userId,
+            total_earned: 0,
+            pending_payout: 0,
+            total_withdrawn: 0,
+            available_balance: 0,
+            currency: 'NGN',
+          });
+        } catch (balanceErr) {
+          console.warn('Host balance auto-creation notice:', balanceErr);
         }
       }
-    });
-    
-    if (error) {
-      alert(error.message);
-      setLoading(false);
-    } else {
-      // Typically create the Brand here, but for now we'll just redirect to dashboard
+      
       window.location.href = '/dashboard';
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'An unexpected error occurred. Please try again.');
+      setLoading(false);
     }
   };
 
-  const handleAppleSignup = async () => {
-    const { createClient } = await import('@/lib/supabase/client');
-    const supabase = createClient();
-    
-    await supabase.auth.signInWithOAuth({
-      provider: 'apple',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`
-      }
-    });
-  };
-
   return (
-    <div className="min-h-screen bg-[#0a0514] flex flex-col font-body">
-
+    <div className="min-h-[100dvh] bg-[#08090A] flex flex-col font-body text-[#F9FAFB] selection:bg-violet-500/30 overflow-x-hidden">
       {/* Background glow */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-violet-700/15 rounded-full blur-[120px]" />
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-violet-900/10 rounded-full blur-[130px]" />
       </div>
 
       <LandingNav
@@ -73,199 +100,123 @@ export default function SignupPage() {
         authLink={{ href: '/auth/login', label: 'Already have an account?', highlight: 'Log in' }}
       />
 
-      {/* Auth Container */}
-      <div className="flex-1 flex items-center justify-center px-4 py-16">
+      {/* Main Container */}
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 py-24 sm:py-28">
         <div className="w-full max-w-md">
 
-          {/* Step Indicator */}
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <div className={`flex items-center gap-2 text-xs font-bold ${step >= 1 ? 'text-violet-400' : 'text-white/20'}`}>
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-extrabold ${step > 1 ? 'bg-violet-600 text-white' : step === 1 ? 'border-2 border-violet-500 text-violet-400' : 'border-2 border-white/10 text-white/20'}`}>
-                {step > 1 ? <CheckCircle2 className="h-3.5 w-3.5" /> : '1'}
-              </div>
-              Account
-            </div>
-            <div className={`h-px w-10 ${step === 2 ? 'bg-violet-500' : 'bg-white/10'}`} />
-            <div className={`flex items-center gap-2 text-xs font-bold ${step === 2 ? 'text-violet-400' : 'text-white/20'}`}>
-              <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-extrabold ${step === 2 ? 'border-2 border-violet-500 text-violet-400' : 'border-2 border-white/10 text-white/20'}`}>
-                2
-              </div>
-              Organisation
-            </div>
+          {/* Heading */}
+          <div className="text-center mb-8">
+            <h1 className="font-heading text-3xl sm:text-4xl font-black text-white tracking-tight">
+              Create an account
+            </h1>
+            <p className="text-sm text-white/50 mt-2">
+              Start creating events and selling tickets
+            </p>
           </div>
 
-          {/* Step 1: Account Details */}
-          {step === 1 && (
-            <>
-              <div className="text-center mb-8">
-                <h1 className="font-heading text-3xl font-extrabold text-white">Create your account</h1>
-                <p className="text-sm text-white/40 mt-2">
-                  Free forever. No credit card required.
-                </p>
+          <div className="rounded-3xl border border-white/10 bg-[#111113] p-6 sm:p-8 shadow-2xl shadow-black/80 backdrop-blur-xl">
+            {errorMessage && (
+              <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3.5 text-xs text-rose-300">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
+                <span className="leading-relaxed">{errorMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSignup} className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-white/70 uppercase tracking-wider mb-2">
+                  Host / Brand Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Kelvin Events or TheScene Nightlife"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500 focus:bg-white/[0.07] transition"
+                />
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-white/[0.04] p-8 backdrop-blur-sm">
-                <form onSubmit={handleStep1} className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-white/70 uppercase tracking-wider mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500 focus:bg-white/[0.07] transition"
+                />
+              </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-white/60 mb-1.5">Email Address *</label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-white/60 mb-1.5">Password *</label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        minLength={8}
-                        placeholder="At least 8 characters"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pr-11 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-
-                    {/* Password strength indicator */}
-                    {password.length > 0 && (
-                      <div className="mt-2 flex gap-1">
-                        {[0, 1, 2, 3].map((i) => (
-                          <div
-                            key={i}
-                            className={`h-1 flex-1 rounded-full transition ${
-                              password.length > i * 3
-                                ? password.length >= 12
-                                  ? 'bg-emerald-500'
-                                  : password.length >= 8
-                                  ? 'bg-amber-500'
-                                  : 'bg-red-500'
-                                : 'bg-white/10'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
+              <div>
+                <label className="block text-xs font-bold text-white/70 uppercase tracking-wider mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={8}
+                    placeholder="At least 8 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 pr-11 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500 focus:bg-white/[0.07] transition"
+                  />
                   <button
-                    type="submit"
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-3.5 font-heading text-sm font-extrabold text-white hover:bg-violet-500 transition shadow-lg shadow-violet-700/30 mt-2"
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition p-1"
                   >
-                    Continue
-                    <ArrowRight className="h-4 w-4" />
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
-                </form>
-
-                <div className="my-6 flex items-center gap-3">
-                  <div className="flex-1 h-px bg-white/5" />
-                  <span className="text-xs text-white/20">or</span>
-                  <div className="flex-1 h-px bg-white/5" />
                 </div>
 
-                {/* Apple SSO */}
-                <button
-                  type="button"
-                  onClick={handleAppleSignup}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 py-3 text-sm font-bold text-white hover:bg-white/20 transition"
-                >
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
-                    <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.04 2.26-.8 3.59-.8 1.83.08 3.12.87 3.99 2.11-3.25 1.95-2.73 5.92.5 7.21-.71 1.77-1.57 3.25-3.16 3.65zm-3.2-13.06c-.19-1.89 1.15-3.66 3.03-3.87.31 2.01-1.39 3.73-3.03 3.87z" />
-                  </svg>
-                  Continue with Apple
-                </button>
+                {password.length > 0 && (
+                  <div className="mt-2.5 flex gap-1.5">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className={`h-1 flex-1 rounded-full transition ${
+                          password.length > i * 3
+                            ? password.length >= 12
+                              ? 'bg-emerald-500'
+                              : password.length >= 8
+                              ? 'bg-amber-500'
+                              : 'bg-red-500'
+                            : 'bg-white/10'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <p className="mt-5 text-center text-[11px] text-white/20 leading-relaxed">
-                By signing up you agree to our{' '}
-                <a href="#" className="text-white/40 underline hover:text-white/60">Terms of Use</a>{' '}
-                and{' '}
-                <a href="#" className="text-white/40 underline hover:text-white/60">Privacy Policy</a>.
-              </p>
-            </>
-          )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-white text-black py-4 font-heading text-sm font-bold hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 transition shadow-xl mt-2"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-black" />
+                ) : (
+                  <>
+                    Create Account
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
 
-          {/* Step 2: Organisation Details */}
-          {step === 2 && (
-            <>
-              <div className="text-center mb-8">
-                <h1 className="font-heading text-3xl font-extrabold text-white">About your organisation</h1>
-                <p className="text-sm text-white/40 mt-2">
-                  Help guests and attendees know who they are buying from.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/8 bg-white/[0.04] p-8 backdrop-blur-sm">
-                <form onSubmit={handleSignup} className="space-y-5">
-
-                  <div>
-                    <label className="block text-xs font-bold text-white/60 mb-1.5">Organisation / Promoter Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. TheScene Nightlife LLC"
-                      value={orgName}
-                      onChange={(e) => setOrgName(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition"
-                    />
-                    <p className="text-[10px] text-white/25 mt-1">This appears on tickets and guest receipts.</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-white/60 mb-1.5">Phone Number *</label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="+234 xxx xxxx xxxx"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 transition"
-                    />
-                    <p className="text-[10px] text-white/25 mt-1">Used for account verification and support.</p>
-                  </div>
-
-
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setStep(1)}
-                      className="flex-1 rounded-xl border border-white/10 bg-white/5 py-3 font-heading text-xs font-bold text-white/60 hover:bg-white/10 hover:text-white transition"
-                    >
-                      Back
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="flex-[2] inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-3.5 font-heading text-sm font-extrabold text-white hover:bg-violet-500 disabled:opacity-60 transition shadow-lg shadow-violet-700/30"
-                    >
-                      {loading ? (
-                        <span className="inline-block h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          Create Account
-                          <ArrowRight className="h-4 w-4" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </>
-          )}
-
+          <p className="mt-8 text-center text-xs text-white/40">
+            Already have an account?{' '}
+            <Link href="/auth/login" className="text-violet-400 font-bold hover:text-violet-300 transition">
+              Log in
+            </Link>
+          </p>
         </div>
       </div>
     </div>

@@ -106,7 +106,7 @@ export default function GlobalHostHub({
   });
 
   return (
-    <div className="h-screen bg-[#080809] flex flex-col font-body overflow-hidden text-[#F9FAFB]">
+    <div className="h-[100dvh] bg-[#080809] flex flex-col font-body overflow-hidden text-[#F9FAFB]">
       {/* Header */}
       <Header
         organizerName={

@@ -204,6 +204,14 @@ export default function EventClient({
   const supabase = createClient();
 
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
+  const mainContentRef = React.useRef<HTMLElement>(null);
+
+  // Instantly scroll the main content pane to top whenever the tab changes
+  React.useEffect(() => {
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTop = 0;
+    }
+  }, [activeTab]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -1122,7 +1130,7 @@ export default function EventClient({
   ];
 
   return (
-    <div className="h-screen bg-[#080809] flex flex-col font-body overflow-hidden selection:bg-violet-500/30">
+    <div className="h-[100dvh] bg-[#080809] flex flex-col font-body overflow-hidden selection:bg-violet-500/30">
       <Header
         organizerName={profile?.full_name || profile?.username || "Host"}
         avatarUrl={profile?.avatar_url}
@@ -1192,7 +1200,7 @@ export default function EventClient({
           </div>
         </aside>
 
-        <main className="flex-1 overflow-y-auto bg-[#080809] p-6 md:p-8 text-[#F9FAFB]">
+        <main ref={mainContentRef} className="flex-1 overflow-y-auto bg-[#080809] p-6 md:p-8 text-[#F9FAFB]">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-6 border-b border-white/10">
             <div>
               <div className="flex items-center gap-3">
@@ -1329,54 +1337,87 @@ export default function EventClient({
                     </button>
                   </div>
                   {localTickets && localTickets.length > 0 ? (
-                    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-                      <table className="w-full text-left text-xs min-w-[480px]">
-                      <thead>
-                        <tr className="border-b border-white/10 text-[10px] font-extrabold uppercase tracking-wider text-white/30">
-                          <th className="pb-4 pr-4">Attendee</th>
-                          <th className="pb-4 px-4">Ticket</th>
-                          <th className="pb-4 px-4">Amount</th>
-                          <th className="pb-4 pl-4">Date</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5 text-sm">
+                    <>
+                      {/* Mobile card list (hidden on sm+) */}
+                      <div className="sm:hidden flex flex-col divide-y divide-white/5">
                         {localTickets.slice(0, 5).map((t: any) => (
-                          <tr key={t.id}>
-                            <td className="py-4 pr-4">
-                              <div className="flex items-center gap-3">
-                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/20 text-violet-400 text-xs font-bold">
-                                  {guestName(t).charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                  <div className="font-bold text-white text-xs">
-                                    {guestName(t)}
-                                  </div>
-                                  <div className="text-[10px] text-white/40">
-                                    {guestEmail(t)}
-                                  </div>
-                                </div>
+                          <div key={t.id} className="py-3 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-violet-400 text-xs font-bold">
+                                {guestName(t).charAt(0).toUpperCase()}
                               </div>
-                            </td>
-                            <td className="py-4 px-4">
-                              <span className="inline-flex rounded bg-violet-500/20 px-2 py-1 text-[10px] font-bold text-violet-400">
-                                {tierName(t, allTiers)}
-                              </span>
-                            </td>
-                            <td className="py-4 px-4 font-bold text-white text-xs">
-                              {(t.reference || "").toLowerCase().startsWith("concierge_") ? (
-                                <span className="text-violet-400 font-extrabold uppercase text-[10px] tracking-wide">Concierge</span>
-                              ) : fmt(t.total_paid || 0)}
-                            </td>
-                            <td className="py-4 pl-4 text-white/50 text-xs">
-                              {t.purchased_at
-                                ? new Date(t.purchased_at).toLocaleDateString()
-                                : "-"}
-                            </td>
-                          </tr>
+                              <div className="min-w-0">
+                                <div className="font-bold text-white text-xs truncate">{guestName(t)}</div>
+                                <div className="text-[10px] text-white/40 truncate">{guestEmail(t)}</div>
+                                <span className="inline-flex rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-bold text-violet-400 mt-0.5">
+                                  {tierName(t, allTiers)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="font-bold text-white text-xs">
+                                {(t.reference || "").toLowerCase().startsWith("concierge_") ? (
+                                  <span className="text-violet-400 font-extrabold uppercase text-[10px] tracking-wide">Concierge</span>
+                                ) : fmt(t.total_paid || 0)}
+                              </div>
+                              <div className="text-[10px] text-white/40 mt-0.5">
+                                {t.purchased_at ? new Date(t.purchased_at).toLocaleDateString() : "-"}
+                              </div>
+                            </div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
-                    </div>
+                      </div>
+
+                      {/* Desktop table (hidden on mobile) */}
+                      <div className="hidden sm:block overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                        <table className="w-full text-left text-xs min-w-[480px]">
+                        <thead>
+                          <tr className="border-b border-white/10 text-[10px] font-extrabold uppercase tracking-wider text-white/30">
+                            <th className="pb-4 pr-4">Attendee</th>
+                            <th className="pb-4 px-4">Ticket</th>
+                            <th className="pb-4 px-4">Amount</th>
+                            <th className="pb-4 pl-4">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 text-sm">
+                          {localTickets.slice(0, 5).map((t: any) => (
+                            <tr key={t.id}>
+                              <td className="py-4 pr-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/20 text-violet-400 text-xs font-bold">
+                                    {guestName(t).charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-white text-xs">
+                                      {guestName(t)}
+                                    </div>
+                                    <div className="text-[10px] text-white/40">
+                                      {guestEmail(t)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4 px-4">
+                                <span className="inline-flex rounded bg-violet-500/20 px-2 py-1 text-[10px] font-bold text-violet-400">
+                                  {tierName(t, allTiers)}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4 font-bold text-white text-xs">
+                                {(t.reference || "").toLowerCase().startsWith("concierge_") ? (
+                                  <span className="text-violet-400 font-extrabold uppercase text-[10px] tracking-wide">Concierge</span>
+                                ) : fmt(t.total_paid || 0)}
+                              </td>
+                              <td className="py-4 pl-4 text-white/50 text-xs">
+                                {t.purchased_at
+                                  ? new Date(t.purchased_at).toLocaleDateString()
+                                  : "-"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        </table>
+                      </div>
+                    </>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                       <Ticket className="h-10 w-10 text-white/10 mb-3" />
@@ -2160,7 +2201,45 @@ export default function EventClient({
                 />
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-[#0e0e11] overflow-x-auto shadow-xl">
+              {/* Mobile card list */}
+              <div className="sm:hidden space-y-2">
+                {filteredTickets.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-white/10 bg-[#0e0e11]">
+                    <Ticket className="h-10 w-10 text-white/10 mb-3" />
+                    <div className="text-sm font-semibold text-white/40">No orders yet</div>
+                  </div>
+                ) : filteredTickets.map((t: any) => (
+                  <div key={t.id} className="rounded-2xl border border-white/10 bg-[#0e0e11] p-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-500/20 text-violet-400 text-xs font-bold">
+                        {guestName(t).charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-white text-xs truncate">{guestName(t)}</div>
+                        <div className="text-[10px] text-white/40 truncate">{guestEmail(t)}</div>
+                        <span className="inline-flex rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-bold text-violet-400 mt-0.5">
+                          {tierName(t, allTiers)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-bold text-xs">
+                        {(t.reference || "").toLowerCase().startsWith("concierge_") ? (
+                          <span className="text-violet-400 uppercase text-[10px] tracking-wide">Concierge</span>
+                        ) : (
+                          <span className="text-violet-400">{fmt(t.total_paid || 0)}</span>
+                        )}
+                      </div>
+                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300 uppercase mt-1 inline-block">
+                        Paid
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden sm:block rounded-2xl border border-white/10 bg-[#0e0e11] overflow-x-auto shadow-xl">
                 <table className="w-full text-left text-xs min-w-[560px]">
                   <thead className="border-b border-white/10 bg-white/5 text-[#8E8D9A]">
                     <tr>

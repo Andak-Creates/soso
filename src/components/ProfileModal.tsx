@@ -423,33 +423,33 @@ export default function ProfileModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl rounded-3xl border border-white/10 bg-[#0f0f12] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-white/10 bg-[#0f0f12] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh] sm:max-h-[85vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/10 bg-[#141418]">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-600/10 border border-violet-500/20 text-violet-400">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-white/10 bg-[#141418]">
+          <div className="flex items-center gap-3 min-w-0 pr-2">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-600/10 border border-violet-500/20 text-violet-400">
               <User className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="font-heading text-lg font-bold text-white">
+            <div className="min-w-0">
+              <h2 className="font-heading text-base sm:text-lg font-bold text-white truncate">
                 Account & Host Profile
               </h2>
-              <p className="text-xs text-white/40">
-                Manage your credentials, host entities, and team access
+              <p className="text-[11px] sm:text-xs text-white/40 truncate">
+                Manage credentials, host entities, and team
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-white/10 px-6 bg-[#111114]">
+        {/* Tab Navigation - Scrollable on mobile without wrapping */}
+        <div className="flex border-b border-white/10 px-2 sm:px-6 bg-[#111114] overflow-x-auto no-scrollbar">
           {[
             { id: "personal", label: "My Profile", icon: User },
             { id: "brands", label: "Host Brands", icon: Building2 },
@@ -462,13 +462,13 @@ export default function ProfileModal({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 py-3 px-4 border-b-2 text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 py-3 px-3.5 sm:px-4 border-b-2 text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
                   active
                     ? "border-violet-500 text-violet-400"
                     : "border-transparent text-white/40 hover:text-white/70"
                 }`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-4 w-4 shrink-0" />
                 {tab.label}
               </button>
             );
@@ -476,7 +476,7 @@ export default function ProfileModal({
         </div>
 
         {/* Tab Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6">
           {/* TAB 1: PERSONAL PROFILE */}
           {activeTab === "personal" && (
             <form onSubmit={handleSavePersonal} className="space-y-5">
@@ -705,8 +705,8 @@ export default function ProfileModal({
 
               {/* Submodal for Create / Edit Host Brand */}
               {isEditingBrand && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                  <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#131317] p-6 shadow-2xl space-y-4">
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md">
+                  <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#131317] p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92dvh] overflow-y-auto">
                     <div className="flex items-center justify-between">
                       <h4 className="font-heading text-base font-bold text-white">
                         {selectedBrand ? "Edit Host Brand" : "Create Host Brand"}

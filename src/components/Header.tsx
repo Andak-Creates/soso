@@ -29,7 +29,7 @@ export default function Header({
   };
 
   return (
-    <header className="sticky top-0 z-200 flex h-[62px] w-full items-center justify-between border-b border-white/10 bg-[#0f0f11] px-4 md:px-8">
+    <header className="sticky top-0 z-30 flex h-[62px] w-full items-center justify-between border-b border-white/10 bg-[#0f0f11] px-4 md:px-8">
       {/* Brand & Mobile Menu */}
       <div className="flex items-center gap-3">
         {onMenuToggle && (
