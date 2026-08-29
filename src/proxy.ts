@@ -35,18 +35,27 @@ export async function proxy(request: NextRequest) {
       }
     );
 
-    // Refresh session if expired
+    const { pathname } = request.nextUrl;
+
+    // ── ROUTE CHECKS ─────────────────────────────────────────────────────────
+    const isProtected =
+      pathname.startsWith("/dashboard") || pathname.startsWith("/events");
+
+    const isAuthRoute =
+      pathname.startsWith("/auth/login") || pathname.startsWith("/auth/signup");
+
+    // Fast-path: Skip Supabase network call entirely for public marketing pages
+    if (!isProtected && !isAuthRoute) {
+      return supabaseResponse;
+    }
+
+    // Refresh session if expired (only for dashboard, events, and auth routes)
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { pathname } = request.nextUrl;
-
     // ── PROTECTED ROUTES ─────────────────────────────────────────────────────
     // Redirect unauthenticated users away from dashboard and event workspace
-    const isProtected =
-      pathname.startsWith("/dashboard") || pathname.startsWith("/events");
-
     if (isProtected && !user) {
       const loginUrl = new URL("/auth/login", request.url);
       loginUrl.searchParams.set("next", pathname);
@@ -55,9 +64,6 @@ export async function proxy(request: NextRequest) {
 
     // ── AUTH ROUTES ───────────────────────────────────────────────────────────
     // Redirect already-authenticated users away from login/signup
-    const isAuthRoute =
-      pathname.startsWith("/auth/login") || pathname.startsWith("/auth/signup");
-
     if (isAuthRoute && user) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
