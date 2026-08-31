@@ -34,19 +34,28 @@ export default async function DashboardPage() {
     redirect('/auth/login');
   }
 
-  // Fetch the host's profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single();
-
-  // Fetch their parties with media and tier capacities (we only need quantity, not stale quantity_sold)
-  const { data: parties } = await supabase
-    .from('parties')
-    .select('*, media:party_media(*), ticket_tiers(quantity)')
-    .eq('host_id', user.id)
-    .order('created_at', { ascending: false });
+  // Fetch profile, parties, and host balances in parallel
+  const [
+    { data: profile },
+    { data: parties },
+    { data: rawBalance }
+  ] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single(),
+    supabase
+      .from('parties')
+      .select('*, media:party_media(*), ticket_tiers(quantity)')
+      .eq('host_id', user.id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('host_balances')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle(),
+  ]);
 
   // Fetch actual tickets to guarantee 100% accurate count & revenue
   const partyIds = parties?.map(p => p.id) || [];
@@ -58,15 +67,22 @@ export default async function DashboardPage() {
   if (partyIds.length > 0) {
     const { data: allTickets } = await supabase
       .from('tickets')
-      .select('party_id, quantity_purchased, quantity, purchase_price, total_paid, service_fee')
+      .select('party_id, quantity_purchased, quantity, purchase_price, total_paid, service_fee, reference')
       .in('party_id', partyIds)
       .or('payment_status.eq.completed,payment_status.is.null');
 
     if (allTickets && allTickets.length > 0) {
       allTickets.forEach(t => {
+        const ref = (t.reference || '').toLowerCase();
+        const isComplimentary = ref.startsWith('concierge_');
+
         const qty = Number(t.quantity_purchased) || Number(t.quantity) || 1;
+
+        // Concierge (free VIP passes) are counted for attendance but not revenue
         totalTicketsSold += qty;
         partyTicketsCountMap[t.party_id] = (partyTicketsCountMap[t.party_id] || 0) + qty;
+
+        if (isComplimentary) return; // Skip revenue calculation for free passes
 
         const totalPaid = Number(t.total_paid) || 0;
         const purchasePrice = Number(t.purchase_price) || 0;
@@ -90,13 +106,6 @@ export default async function DashboardPage() {
       ticket_quantity: tiersCapacity > 0 ? tiersCapacity : p.ticket_quantity,
     };
   });
-
-  // Fetch host balances if available
-  const { data: rawBalance } = await supabase
-    .from('host_balances')
-    .select('*')
-    .eq('user_id', user.id)
-    .maybeSingle();
 
   // Reconcile balance so numbers are 100% accurate in real time
   const totalSettled = Number(rawBalance?.total_withdrawn) || 0;

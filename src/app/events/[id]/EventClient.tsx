@@ -1,16 +1,15 @@
 "use client";
-import BroadcastModal from "@/components/BroadcastModal";
-
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import Header from "@/components/Header";
-import BankAccountModal from "@/components/BankAccountModal";
-import CustomRegistrationBuilder from "@/components/CustomRegistrationBuilder";
 import UserSearchDropdown from "@/components/UserSearchDropdown";
 import { getOptimizedImageUrl } from "@/lib/media";
 import { createClient } from "@/lib/supabase/client";
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import Papa from "papaparse";
+
+// Dynamically load heavy modals to shrink initial bundle
+const BroadcastModal = dynamic(() => import("@/components/BroadcastModal"), { ssr: false });
+const BankAccountModal = dynamic(() => import("@/components/BankAccountModal"), { ssr: false });
+const CustomRegistrationBuilder = dynamic(() => import("@/components/CustomRegistrationBuilder"), { ssr: false });
 import {
   ArrowLeft,
   Megaphone,
@@ -369,12 +368,14 @@ export default function EventClient({
   const eventEnd = rawEventDate ? new Date(rawEventDate) : null;
   const isPast = eventEnd ? eventEnd < new Date() : false;
   const isLive = isPublished && !isPast;
-  const ticketsSold = localTickets.reduce(
-    (s: number, t: any) => s + (Number(t.quantity_purchased) || Number(t.quantity) || 1),
-    0,
-  );
+  const ticketsSold = useMemo(() => {
+    return localTickets.reduce(
+      (s: number, t: any) => s + (Number(t.quantity_purchased) || Number(t.quantity) || 1),
+      0,
+    );
+  }, [localTickets]);
 
-  const getTierSoldCount = (tId: string) => {
+  const getTierSoldCount = useCallback((tId: string) => {
     return localTickets
       .filter((t: any) => t.ticket_tier_id === tId || t.ticket_tiers?.id === tId)
       .reduce(
@@ -382,11 +383,14 @@ export default function EventClient({
           sum + (Number(t.quantity_purchased) || Number(t.quantity) || 1),
         0
       );
-  };
-  const ticketCapacity =
-    allTiers?.reduce((s: number, t: any) => s + (t.quantity || 0), 0) ||
-    party?.ticket_quantity ||
-    0;
+  }, [localTickets]);
+
+  const ticketCapacity = useMemo(() => {
+    return allTiers?.reduce((s: number, t: any) => s + (t.quantity || 0), 0) ||
+      party?.ticket_quantity ||
+      0;
+  }, [allTiers, party]);
+
   const flyerUrl = currentFlyerUrl;
   const eventPublicUrl = party?.slug
     ? `https://thesceneapp.online/${party.slug}`
@@ -394,32 +398,35 @@ export default function EventClient({
 
   // Per-event revenue: accurately computes net host revenue from paid tickets only.
   // Concierge passes are excluded entirely — they are not tracked as revenue.
-  const totalRevenue = localTickets.reduce((sum: number, t: any) => {
-    // Skip concierge passes entirely
-    if ((t.reference || "").toLowerCase().startsWith("concierge_")) return sum;
-    const qty = Number(t.quantity_purchased) || Number(t.quantity) || 1;
-    if (Number(t.purchase_price) > 0) {
-      return sum + Number(t.purchase_price);
-    }
-    const matchedTier = allTiers.find(
-      (tier: any) =>
-        tier.id === t.ticket_tier_id ||
-        tier.id === t.ticket_tiers?.id ||
-        (t.tier_name && tier.name.toLowerCase() === t.tier_name.toLowerCase())
-    );
-    if (matchedTier && matchedTier.price > 0) {
-      return sum + matchedTier.price * qty;
-    }
-    if (Number(t.total_paid) > 0) {
-      return (
-        sum +
-        (Number(t.total_paid) > 3000
-          ? Math.round(Number(t.total_paid) / 1.05)
-          : Number(t.total_paid))
+  const totalRevenue = useMemo(() => {
+    return localTickets.reduce((sum: number, t: any) => {
+      // Skip concierge passes entirely
+      if ((t.reference || "").toLowerCase().startsWith("concierge_")) return sum;
+      const qty = Number(t.quantity_purchased) || Number(t.quantity) || 1;
+      if (Number(t.purchase_price) > 0) {
+        return sum + Number(t.purchase_price);
+      }
+      const matchedTier = allTiers?.find(
+        (tier: any) =>
+          tier.id === t.ticket_tier_id ||
+          tier.id === t.ticket_tiers?.id ||
+          (t.tier_name && tier.name.toLowerCase() === t.tier_name.toLowerCase())
       );
-    }
-    return sum;
-  }, 0);
+      if (matchedTier && matchedTier.price > 0) {
+        return sum + matchedTier.price * qty;
+      }
+      if (Number(t.total_paid) > 0) {
+        return (
+          sum +
+          (Number(t.total_paid) > 3000
+            ? Math.round(Number(t.total_paid) / 1.05)
+            : Number(t.total_paid))
+        );
+      }
+      return sum;
+    }, 0);
+  }, [localTickets, allTiers]);
+
   const pendingPayout = hostBalance?.pending_payout ?? 0;
   const recommendedUshers = Math.max(
     1,
@@ -429,15 +436,17 @@ export default function EventClient({
     (usherForm.staffCount || 1) *
     (usherForm.offeredPrice || USHER_PRICE_PER_STAFF);
 
-  const filteredTickets = localTickets.filter((t: any) => {
-    if (!searchQuery.trim()) return true;
+  const filteredTickets = useMemo(() => {
+    if (!searchQuery.trim()) return localTickets;
     const q = searchQuery.toLowerCase();
-    return (
-      guestName(t).toLowerCase().includes(q) ||
-      guestEmail(t).toLowerCase().includes(q) ||
-      tierName(t, allTiers).toLowerCase().includes(q)
-    );
-  });
+    return localTickets.filter((t: any) => {
+      return (
+        guestName(t).toLowerCase().includes(q) ||
+        guestEmail(t).toLowerCase().includes(q) ||
+        tierName(t, allTiers).toLowerCase().includes(q)
+      );
+    });
+  }, [localTickets, searchQuery, allTiers]);
 
   const togglePublishStatus = async () => {
     setUpdatingPublish(true);
@@ -467,7 +476,7 @@ export default function EventClient({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const downloadGuestList = (format: "csv" | "pdf") => {
+  const exportGuestList = async (format: "csv" | "pdf") => {
     if (!localTickets || localTickets.length === 0) {
       alert("No guests found for this event.");
       return;
@@ -491,6 +500,7 @@ export default function EventClient({
     }));
 
     if (format === "csv") {
+      const Papa = (await import("papaparse")).default;
       const csv = Papa.unparse(data);
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -501,6 +511,8 @@ export default function EventClient({
       link.click();
       document.body.removeChild(link);
     } else if (format === "pdf") {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
       const doc = new jsPDF();
       doc.text(`Guest List: ${party?.title || "Event"}`, 14, 15);
       autoTable(doc, {
@@ -519,7 +531,7 @@ export default function EventClient({
     }
   };
 
-  const downloadEventReport = (format: "csv" | "pdf") => {
+  const downloadEventReport = async (format: "csv" | "pdf") => {
     const totalTicketsSold = localTickets.reduce(
       (sum: number, t: any) =>
         sum + (Number(t.quantity_purchased) || Number(t.quantity) || 1),
@@ -544,6 +556,7 @@ export default function EventClient({
     });
 
     if (format === "csv") {
+      const Papa = (await import("papaparse")).default;
       const summaryData = [
         { Metric: "Total Revenue", Value: totalRevenue },
         { Metric: "Total Tickets Sold", Value: totalTicketsSold },
@@ -561,6 +574,8 @@ export default function EventClient({
       link.click();
       document.body.removeChild(link);
     } else if (format === "pdf") {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
       const doc = new jsPDF();
       doc.setFontSize(18);
       doc.text(`Event Report: ${party?.title || "Event"}`, 14, 20);
@@ -2301,8 +2316,8 @@ export default function EventClient({
                   Guest Roster ({localTickets.length})
                 </h2>
                 <div className="flex gap-2">
-                  <button onClick={() => downloadGuestList("csv")} className="text-[10px] font-bold uppercase tracking-wider text-white/70 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition">Export CSV</button>
-                  <button onClick={() => downloadGuestList("pdf")} className="text-[10px] font-bold uppercase tracking-wider text-theme-purple bg-theme-purple/10 border border-theme-purple/20 px-3 py-1.5 rounded-lg hover:bg-theme-purple/20 transition">Export PDF</button>
+                  <button onClick={() => exportGuestList("csv")} className="text-[10px] font-bold uppercase tracking-wider text-white/70 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition">Export CSV</button>
+                  <button onClick={() => exportGuestList("pdf")} className="text-[10px] font-bold uppercase tracking-wider text-theme-purple bg-theme-purple/10 border border-theme-purple/20 px-3 py-1.5 rounded-lg hover:bg-theme-purple/20 transition">Export PDF</button>
                 </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-[#0e0e11] p-6 shadow-xl space-y-3">
