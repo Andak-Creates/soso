@@ -4,10 +4,12 @@ import React, { useState } from "react";
 import { Bell, LogOut, User, Menu, CreditCard } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import NotificationsPanel from "./NotificationsPanel";
 
 interface HeaderProps {
   organizerName?: string;
   avatarUrl?: string;
+  userId?: string;
   onMenuToggle?: () => void;
   onOpenProfile?: () => void;
   onOpenPayoutSettings?: () => void;
@@ -16,11 +18,14 @@ interface HeaderProps {
 export default function Header({
   organizerName = "TheScene Nightlife LLC",
   avatarUrl = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200",
+  userId,
   onMenuToggle,
   onOpenProfile,
   onOpenPayoutSettings,
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -29,47 +34,58 @@ export default function Header({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-[62px] w-full items-center justify-between border-b border-white/10 bg-[#0f0f11] px-4 md:px-8">
-      {/* Brand & Mobile Menu */}
-      <div className="flex items-center gap-3">
-        {onMenuToggle && (
+    <>
+      <header className="sticky top-0 z-30 flex h-[62px] w-full items-center justify-between border-b border-white/10 bg-[#0f0f11] px-4 md:px-8">
+        {/* Brand & Mobile Menu */}
+        <div className="flex items-center gap-3">
+          {onMenuToggle && (
+            <button
+              onClick={onMenuToggle}
+              className="md:hidden flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/60 transition hover:bg-violet-600/20 hover:text-violet-400 mr-1"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
+          <Link href="/dashboard" className="flex items-center gap-2 group">
+            <span className="font-brand text-2xl text-white tracking-widest group-hover:opacity-80 transition">
+              Bhind.
+            </span>
+            <span className="hidden sm:inline-block text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
+              Host Hub
+            </span>
+          </Link>
+        </div>
+
+        {/* Right User Bar */}
+        <div className="flex items-center gap-3.5">
+          <span className="text-xs text-white/60 hidden sm:inline-block">
+            <strong className="text-white font-semibold">{organizerName}</strong>
+          </span>
+
+          <div className="h-6 w-px bg-white/10 hidden sm:block" />
+
+          {/* Notifications */}
           <button
-            onClick={onMenuToggle}
-            className="md:hidden flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/60 transition hover:bg-violet-600/20 hover:text-violet-400 mr-1"
+            className={`relative flex h-8 w-8 items-center justify-center rounded-full transition ${
+              isNotificationsOpen
+                ? "bg-violet-600/30 text-violet-400 ring-1 ring-violet-500/50"
+                : "bg-white/5 text-white/60 hover:bg-violet-600/20 hover:text-violet-400"
+            }`}
+            aria-label="Notifications"
+            onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
           >
-            <Menu className="h-5 w-5" />
+            <Bell className="h-4 w-4" />
+            {unreadCount > 0 ? (
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-violet-600 px-1 text-[9px] font-extrabold text-white ring-2 ring-[#0f0f11] animate-pulse">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            ) : (
+              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-white/20 ring-2 ring-[#0f0f11]" />
+            )}
           </button>
-        )}
-        <Link href="/dashboard" className="flex items-center gap-2 group">
-          <span className="font-brand text-2xl text-white tracking-widest group-hover:opacity-80 transition">
-            Bhind.
-          </span>
-          <span className="hidden sm:inline-block text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
-            Host Hub
-          </span>
-        </Link>
-      </div>
 
-      {/* Right User Bar */}
-      <div className="flex items-center gap-3.5">
-        <span className="text-xs text-white/60 hidden sm:inline-block">
-          <strong className="text-white font-semibold">{organizerName}</strong>
-        </span>
-
-        <div className="h-6 w-px bg-white/10 hidden sm:block" />
-
-        {/* Notifications */}
-        <button
-          className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/60 transition hover:bg-violet-600/20 hover:text-violet-400"
-          aria-label="Notifications"
-          onClick={() => alert("No new notifications")}
-        >
-          <Bell className="h-4 w-4" />
-          <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-[#0f0f11]" />
-        </button>
-
-        {/* User Avatar with Dropdown */}
-        <div className="relative">
+          {/* User Avatar with Dropdown */}
+          <div className="relative">
           <img
             src={
               avatarUrl ||
@@ -135,5 +151,14 @@ export default function Header({
         </div>
       </div>
     </header>
+
+    {/* Notifications Drawer */}
+      <NotificationsPanel
+        userId={userId}
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        onUnreadCountChange={setUnreadCount}
+      />
+    </>
   );
 }

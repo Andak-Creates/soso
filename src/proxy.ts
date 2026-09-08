@@ -49,7 +49,16 @@ export async function proxy(request: NextRequest) {
       return supabaseResponse;
     }
 
-    // Refresh session if expired (only for dashboard, events, and auth routes)
+    const hasAuthCookie = request.cookies
+      .getAll()
+      .some((c) => c.name.includes("auth-token") || c.name.startsWith("sb-"));
+
+    // Fast-path: Unauthenticated users visiting login/signup should get instant 0ms response
+    if (isAuthRoute && !hasAuthCookie) {
+      return supabaseResponse;
+    }
+
+    // Refresh session if expired (only for protected routes or authenticated auth routes)
     const {
       data: { user },
     } = await supabase.auth.getUser();

@@ -1,11 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import Header from "@/components/Header";
-import CreateEventModal from "@/components/CreateEventModal";
-import ProfileModal from "@/components/ProfileModal";
-import BankAccountModal from "@/components/BankAccountModal";
-import SettlementsModal from "@/components/SettlementsModal";
+
+// Dynamically load heavy modals on demand to shrink mobile bundle
+const CreateEventModal = dynamic(() => import("@/components/CreateEventModal"), { ssr: false });
+const ProfileModal = dynamic(() => import("@/components/ProfileModal"), { ssr: false });
+const BankAccountModal = dynamic(() => import("@/components/BankAccountModal"), { ssr: false });
+const SettlementsModal = dynamic(() => import("@/components/SettlementsModal"), { ssr: false });
+
 import { getOptimizedImageUrl } from "@/lib/media";
 import {
   Plus,
@@ -113,6 +117,7 @@ export default function GlobalHostHub({
           profile?.full_name || profile?.username || "TheScene Host"
         }
         avatarUrl={profile?.avatar_url}
+        userId={user?.id}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenPayoutSettings={() => setIsBankOpen(true)}
       />

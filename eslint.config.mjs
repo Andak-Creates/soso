@@ -25,6 +25,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "scripts/**",
     "src/app/events/EventClient_original.txt",
     "src/app/events/EventClient_original_utf8.txt",
   ]),

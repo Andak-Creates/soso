@@ -969,7 +969,7 @@ export default function CreateEventModal({
                 <div>
                   <div className="text-xs font-bold text-white flex items-center gap-2">
                     Private Event
-                    <span className="bg-theme-purple/20 text-theme-purple px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider border border-theme-purple/30">
+                    <span className="bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider border border-violet-500/30">
                       New
                     </span>
                   </div>

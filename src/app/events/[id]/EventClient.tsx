@@ -54,23 +54,29 @@ import Link from "next/link";
 
 const AVAILABLE_GENRES = [
   "Afrobeats",
-  "Amapiano",
-  "Hip-Hop",
-  "House / EDM",
+  "Hip Hop",
   "R&B",
+  "Amapiano",
+  "House",
   "Dancehall",
+  "Reggae",
+  "Afro House",
   "Pop",
-  "Latin / Reggaeton",
+  "EDM",
+  "Trap",
+  "Alte",
 ];
 const AVAILABLE_VIBES = [
-  "High Energy",
-  "VIP Lounge",
-  "Chill & Cocktail",
-  "Beach Party",
-  "Rooftop",
-  "Underground Rave",
-  "Festival",
-  "Private Gala",
+  "🔥 Wild",
+  "😌 Chill",
+  "🌳 Outdoor",
+  "🏠 Indoor",
+  "🎭 Exclusive",
+  "🎉 Open",
+  "💃 Dance",
+  "🎵 Live Music",
+  "🌃 Rooftop",
+  "🏖️ Beach",
 ];
 const USHER_PRICE_PER_STAFF = 35000;
 
@@ -259,11 +265,36 @@ export default function EventClient({
   const [settingsPrivate, setSettingsPrivate] = useState<boolean>(
     party?.is_private ?? false,
   );
+  // Safely parse vibe/genre arrays — DB may return a real array, JSON string, or Postgres {a,b} array
+  const parseDbArray = (val: unknown): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val as string[];
+    if (typeof val === "string") {
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) return parsed as string[];
+      } catch {
+        // Handle Postgres text[] string format: "{item1,item2}"
+        if (val.startsWith("{") && val.endsWith("}")) {
+          return val
+            .slice(1, -1)
+            .split(",")
+            .map((s) => s.trim().replace(/^"|"$/g, ""))
+            .filter(Boolean);
+        }
+      }
+    }
+    return [];
+  };
+
+  const parsedGenres = parseDbArray(party?.music_genres);
+  const parsedVibes = parseDbArray(party?.vibes);
+
   const [settingsGenres, setSettingsGenres] = useState<string[]>(
-    party?.music_genres || ["Afrobeats"],
+    parsedGenres.length > 0 ? parsedGenres : ["Afrobeats"],
   );
   const [settingsVibes, setSettingsVibes] = useState<string[]>(
-    party?.vibes || ["High Energy"],
+    parsedVibes.length > 0 ? parsedVibes : ["🔥 Wild"],
   );
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -287,6 +318,7 @@ export default function EventClient({
     genderPref: "mixed",
   });
   const [usherRequests, setUsherRequests] = useState<any[]>([]);
+  const [requestingUshers, setRequestingUshers] = useState(false);
 
   const MIN_USHER_PRICE = 20000;
 
@@ -964,37 +996,55 @@ export default function EventClient({
     party,
   ]);
 
-  const handlePlaceWristbandOrder = () => {
+  const handlePlaceWristbandOrder = async () => {
     if (!wristbandAddress.trim()) {
       alert("Please enter your full delivery address.");
       return;
     }
     setPlacingWristbandOrder(true);
 
-    const subject = encodeURIComponent(`Wristband Inquiry - ${eventTitle}`);
-    const body = encodeURIComponent(
-      `Event: ${eventTitle}\nEvent ID: ${eventId}\nHost: ${profile?.full_name || profile?.username || "N/A"}\n\n` +
-        `Product: ${wristbandProduct.name}\nQuantity: ${wristbandQuantity} units\nUnit Price: ${wristbandProduct.price}\nEstimated Total: ${wristbandQuantity * wristbandProduct.price}\n\n` +
-        `Delivery Address: ${wristbandAddress}\n\n` +
-        `Design Inspiration / Notes:\n${wristbandDesignInspo || "No design notes provided - please design for us."}\n`,
-    );
-    window.open(
-      `mailto:thesceneappsupport@gmail.com?subject=${subject}&body=${body}`,
-      "_blank",
-    );
+    const totalCost = wristbandQuantity * wristbandProduct.price;
 
-    setTimeout(() => {
+    try {
+      const res = await fetch("/api/service-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId,
+          eventTitle,
+          requestType: "wristbands",
+          hostName: profile?.full_name || profile?.username || "Host",
+          hostEmail: profile?.email || user?.email,
+          hostPhone: profile?.phone || profile?.phone_number,
+          details: {
+            productName: wristbandProduct.name,
+            unitPrice: wristbandProduct.price,
+            quantity: wristbandQuantity,
+            totalCost,
+            deliveryAddress: wristbandAddress,
+            designInspo: wristbandDesignInspo || "None provided",
+          },
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to submit request");
+
       alert(
-        "Your wristband inquiry has been prepared. Please send the email that just opened, and our team will get back to you with a design mockup and timeline.",
+        "✅ Wristband order submitted to TheScene Admin team! We have recorded your request in the system and an admin will contact you directly via call/WhatsApp ASAP to finalize your design and delivery."
       );
+      setWristbandDesignInspo("");
+    } catch (err: any) {
+      alert(`Submission error: ${err.message || "Failed to place order."}`);
+    } finally {
       setPlacingWristbandOrder(false);
-    }, 400);
+    }
   };
 
-  const handleRequestUshers = () => {
+  const handleRequestUshers = async () => {
     if (usherForm.offeredPrice < MIN_USHER_PRICE) {
       alert(
-        `Minimum offer per usher is ${fmt(MIN_USHER_PRICE)}. Please increase your offer.`,
+        `Minimum offer per usher is ${fmt(MIN_USHER_PRICE)}. Please increase your offer.`
       );
       return;
     }
@@ -1003,36 +1053,54 @@ export default function EventClient({
       return;
     }
 
+    setRequestingUshers(true);
     const totalCost = usherForm.staffCount * usherForm.offeredPrice;
 
-    const subject = encodeURIComponent(
-      `Usher Staffing Request - ${eventTitle}`,
-    );
-    const body = encodeURIComponent(
-      `Event: ${eventTitle}\nEvent ID: ${eventId}\nEvent Date: ${eventDate}\nVenue: ${eventVenue}\nHost: ${profile?.full_name || profile?.username || "N/A"}\n\n` +
-        `Expected Guests: ${usherForm.expectedGuests}\nUshers Requested: ${usherForm.staffCount}\nGender Preference: ${usherForm.genderPref}\n\n` +
-        `Offered Price per Usher: ${usherForm.offeredPrice}\nTotal Offered: ${totalCost}\n\n` +
-        `Standard Rate: ${USHER_PRICE_PER_STAFF}/usher\nRecommended Staff: ${recommendedUshers} (1 per 75 guests)\n`,
-    );
-    window.open(
-      `mailto:thesceneappsupport@gmail.com?subject=${subject}&body=${body}`,
-      "_blank",
-    );
+    try {
+      const res = await fetch("/api/service-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId,
+          eventTitle,
+          requestType: "ushers",
+          hostName: profile?.full_name || profile?.username || "Host",
+          hostEmail: profile?.email || user?.email,
+          hostPhone: profile?.phone || profile?.phone_number,
+          details: {
+            expectedGuests: usherForm.expectedGuests,
+            staffCount: usherForm.staffCount,
+            genderPref: usherForm.genderPref,
+            offeredPrice: usherForm.offeredPrice,
+            totalCost,
+            recommendedUshers,
+          },
+        }),
+      });
 
-    const newReq = {
-      id: Math.random().toString(36).substring(7),
-      date: new Date().toISOString(),
-      guests: usherForm.expectedGuests,
-      gender: usherForm.genderPref,
-      staffCount: usherForm.staffCount,
-      offeredPrice: usherForm.offeredPrice,
-      cost: totalCost,
-      status: "Pending Review",
-    };
-    setUsherRequests((prev) => [newReq, ...prev]);
-    alert(
-      `Staffing inquiry sent! An email has been prepared to thesceneappsupport@gmail.com. Please send it, and our team will get back to you.`,
-    );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to submit request");
+
+      const newReq = {
+        id: data.request?.id || Math.random().toString(36).substring(7),
+        date: new Date().toISOString(),
+        guests: usherForm.expectedGuests,
+        gender: usherForm.genderPref,
+        staffCount: usherForm.staffCount,
+        offeredPrice: usherForm.offeredPrice,
+        cost: totalCost,
+        status: "Pending Admin Contact",
+      };
+      setUsherRequests((prev) => [newReq, ...prev]);
+
+      alert(
+        "✅ Staffing request submitted to TheScene Admin team! We have recorded your request in the database and an admin will reach out to you via call/WhatsApp to confirm staff allocation."
+      );
+    } catch (err: any) {
+      alert(`Submission error: ${err.message || "Failed to submit request."}`);
+    } finally {
+      setRequestingUshers(false);
+    }
   };
 
   const handleDeleteEvent = async () => {
@@ -1149,6 +1217,7 @@ export default function EventClient({
       <Header
         organizerName={profile?.full_name || profile?.username || "Host"}
         avatarUrl={profile?.avatar_url}
+        userId={user?.id}
         onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         onOpenPayoutSettings={() => setIsBankOpen(true)}
       />
@@ -1242,53 +1311,65 @@ export default function EventClient({
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="grid grid-cols-3 sm:flex sm:items-center gap-1.5 sm:gap-3 w-full sm:w-auto">
               <button
                 onClick={() => setShowBroadcastModal(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-600/20 px-4 py-2.5 text-xs font-extrabold text-violet-300 hover:bg-violet-600/30 transition shadow-lg"
+                className="h-10 min-w-0 inline-flex items-center justify-center gap-1 sm:gap-2 rounded-xl border border-violet-500/30 bg-violet-600/20 px-2 sm:px-4 text-[11px] sm:text-xs font-extrabold text-violet-300 hover:bg-violet-600/30 transition shadow-lg whitespace-nowrap"
               >
-                <Megaphone className="h-3.5 w-3.5 text-violet-400" />
-                <span>Announcement</span>
+                <Megaphone className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+                <span className="truncate">Announce<span className="hidden sm:inline">ment</span></span>
               </button>
 
               <button
                 onClick={togglePublishStatus}
                 disabled={updatingPublish}
-                className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-extrabold transition shadow-lg border ${
+                className={`h-10 min-w-0 inline-flex items-center justify-center gap-1 sm:gap-2 rounded-xl px-2 sm:px-5 text-[11px] sm:text-xs font-extrabold transition shadow-lg border whitespace-nowrap ${
                   isPublished
                     ? "border-red-500/30 text-red-400 bg-red-500/5 hover:bg-red-500/10"
                     : "bg-violet-600 text-white hover:bg-violet-500 shadow-violet-600/20"
                 }`}
               >
                 {updatingPublish ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
                 ) : null}
-                {updatingPublish
-                  ? "Updating..."
-                  : isPublished
-                    ? "Unpublish Event"
-                    : "Publish Live"}
+                <span className="truncate">
+                  {updatingPublish
+                    ? "Updating..."
+                    : isPublished
+                      ? "Unpublish"
+                      : "Publish Live"}
+                </span>
               </button>
 
               <button
                 onClick={copyEventLink}
-                className="inline-flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/10 hover:border-violet-500/40 transition shadow-sm"
+                className="h-10 min-w-0 inline-flex items-center justify-center gap-1 sm:gap-2 rounded-xl bg-white/5 border border-white/10 px-2 sm:px-4 text-[11px] sm:text-xs font-bold text-white hover:bg-white/10 hover:border-violet-500/40 transition shadow-sm whitespace-nowrap"
               >
                 {copiedLink ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                 ) : (
-                  <LinkIcon className="h-3.5 w-3.5 text-violet-400" />
+                  <LinkIcon className="h-3.5 w-3.5 text-violet-400 shrink-0" />
                 )}
-                {copiedLink ? "Copied!" : "Copy Link"}
+                <span className="truncate">{copiedLink ? "Copied!" : "Copy Link"}</span>
               </button>
             </div>
           </div>
 
           {activeTab === "dashboard" && (
             <div className="space-y-6">
-              <div className="flex justify-end gap-3 mb-2">
-                <button onClick={() => downloadEventReport("csv")} className="text-[11px] font-bold uppercase tracking-wider text-white/70 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition">Export CSV</button>
-                <button onClick={() => downloadEventReport("pdf")} className="text-[11px] font-bold uppercase tracking-wider text-theme-purple bg-theme-purple/10 border border-theme-purple/20 px-3 py-1.5 rounded-lg hover:bg-theme-purple/20 transition">Export PDF</button>
+              <div className="flex items-center justify-end gap-2.5 mb-2">
+                <button
+                  onClick={() => downloadEventReport("csv")}
+                  className="h-8 inline-flex items-center justify-center text-[11px] font-bold uppercase tracking-wider text-white/70 bg-white/5 border border-white/10 px-3.5 rounded-lg hover:bg-white/10 hover:text-white transition"
+                >
+                  Export CSV
+                </button>
+                <button
+                  onClick={() => downloadEventReport("pdf")}
+                  className="h-8 inline-flex items-center justify-center text-[11px] font-bold uppercase tracking-wider text-violet-400 bg-violet-600/10 border border-violet-500/20 px-3.5 rounded-lg hover:bg-violet-600/20 hover:text-violet-300 transition"
+                >
+                  Export PDF
+                </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="rounded-2xl border border-white/10 bg-[#0e0e11] p-6 shadow-xl">
@@ -1654,7 +1735,7 @@ export default function EventClient({
 
           {activeTab === "preview" && (
             <div className="space-y-6 max-w-4xl">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="font-heading text-xl font-black text-white">
                     Event Preview
@@ -1663,20 +1744,22 @@ export default function EventClient({
                     This is how your event appears on TheScene website and app.
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
                   <button
                     onClick={() => setActiveTab("settings")}
-                    className="inline-flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/10 transition"
+                    className="flex-1 sm:flex-initial h-10 inline-flex items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 text-xs font-bold text-white hover:bg-white/10 transition whitespace-nowrap"
                   >
-                    <Edit className="h-3.5 w-3.5" /> Edit Details
+                    <Edit className="h-3.5 w-3.5 shrink-0" />
+                    <span>Edit Details</span>
                   </button>
                   <a
                     href={eventPublicUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white hover:bg-violet-500 transition"
+                    className="flex-1 sm:flex-initial h-10 inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-xs font-bold text-white hover:bg-violet-500 transition whitespace-nowrap shadow-lg shadow-violet-600/20"
                   >
-                    <ExternalLink className="h-3.5 w-3.5" /> Open Public Link
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    <span>Open Public Link</span>
                   </a>
                 </div>
               </div>
@@ -2311,49 +2394,84 @@ export default function EventClient({
 
           {activeTab === "guestlist" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <h2 className="font-heading text-xl font-black text-white">
                   Guest Roster ({localTickets.length})
                 </h2>
-                <div className="flex gap-2">
-                  <button onClick={() => exportGuestList("csv")} className="text-[10px] font-bold uppercase tracking-wider text-white/70 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition">Export CSV</button>
-                  <button onClick={() => exportGuestList("pdf")} className="text-[10px] font-bold uppercase tracking-wider text-theme-purple bg-theme-purple/10 border border-theme-purple/20 px-3 py-1.5 rounded-lg hover:bg-theme-purple/20 transition">Export PDF</button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => exportGuestList("csv")}
+                    className="h-8 inline-flex items-center justify-center text-[11px] font-bold uppercase tracking-wider text-white/70 bg-white/5 border border-white/10 px-3.5 rounded-lg hover:bg-white/10 hover:text-white transition whitespace-nowrap"
+                  >
+                    Export CSV
+                  </button>
+                  <button
+                    onClick={() => exportGuestList("pdf")}
+                    className="h-8 inline-flex items-center justify-center text-[11px] font-bold uppercase tracking-wider text-violet-400 bg-violet-600/10 border border-violet-500/20 px-3.5 rounded-lg hover:bg-violet-600/20 hover:text-violet-300 transition whitespace-nowrap"
+                  >
+                    Export PDF
+                  </button>
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-[#0e0e11] p-6 shadow-xl space-y-3">
+              <div className="rounded-2xl border border-white/10 bg-[#0e0e11] p-4 sm:p-6 shadow-xl space-y-3">
                 {localTickets.map((t: any) => (
                   <div
                     key={t.id}
-                    className="flex items-center justify-between p-3.5 rounded-xl bg-white/5 border border-white/10 animate-fade-in"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition animate-fade-in"
                   >
-                    <div>
-                      <div className="text-sm font-bold text-white">
-                        {guestName(t)}
+                    <div className="flex items-start sm:items-center justify-between sm:justify-start gap-3 min-w-0">
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-white truncate">
+                          {guestName(t)}
+                        </div>
+                        <div className="text-xs text-white/40 truncate">
+                          {guestEmail(t)}
+                        </div>
                       </div>
-                      <div className="text-xs text-white/40">
-                        {guestEmail(t)}
+                      {/* Mobile: Arrived badge top right */}
+                      <div className="sm:hidden shrink-0">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center gap-1 ${
+                            t.quantity_used > 0
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-white/10 text-white/50 border border-white/10"
+                          }`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${t.quantity_used > 0 ? "bg-emerald-400" : "bg-white/30"}`} />
+                          {t.quantity_used > 0
+                            ? `Arrived (${t.quantity_used}/${t.quantity_purchased || 1})`
+                            : "Not Arrived"}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-white/60">
-                        {tierName(t, allTiers)}
-                      </span>
-                      {(t.reference || "").toLowerCase().startsWith("concierge_") && (
-                        <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                          Concierge
+
+                    <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-white/70 whitespace-nowrap">
+                          {tierName(t, allTiers)}
                         </span>
-                      )}
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                          t.quantity_used > 0
-                            ? "bg-emerald-500/20 text-emerald-300"
-                            : "bg-white/10 text-white/40"
-                        }`}
-                      >
-                        {t.quantity_used > 0
-                          ? `Arrived (${t.quantity_used}/${t.quantity_purchased || 1})`
-                          : "Not Arrived"}
-                      </span>
+                        {(t.reference || "").toLowerCase().startsWith("concierge_") && (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide bg-violet-500/20 text-violet-300 border border-violet-500/30 whitespace-nowrap">
+                            Concierge
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Desktop: Arrived badge */}
+                      <div className="hidden sm:block shrink-0">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center gap-1 ${
+                            t.quantity_used > 0
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-white/10 text-white/50 border border-white/10"
+                          }`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${t.quantity_used > 0 ? "bg-emerald-400" : "bg-white/30"}`} />
+                          {t.quantity_used > 0
+                            ? `Arrived (${t.quantity_used}/${t.quantity_purchased || 1})`
+                            : "Not Arrived"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -2363,7 +2481,7 @@ export default function EventClient({
 
           {activeTab === "tables" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="font-heading text-xl font-black text-white">
                     Table Allocations
@@ -2377,7 +2495,7 @@ export default function EventClient({
                     setNewTierForm({ name: "", price: "", quantity: "1", maxPerOrder: "1", description: "", tier_type: "table", tableCapacity: "", app_only: false });
                     setShowAddTierModal(true);
                   }}
-                  className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white hover:bg-violet-500 transition"
+                  className="h-10 inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-xs font-bold text-white hover:bg-violet-500 transition whitespace-nowrap shrink-0"
                 >
                   <Plus className="h-4 w-4" /> Add Table
                 </button>
@@ -2720,9 +2838,9 @@ export default function EventClient({
                     }
                     className="w-full rounded-xl border border-white/10 bg-[#141418] px-4 py-3 text-sm text-white outline-none focus:border-violet-500"
                   >
-                    <option value="mixed">Mixed (Equal Genders)</option>
-                    <option value="female">All Female</option>
-                    <option value="male">All Male</option>
+                    <option value="mixed">Mixed</option>
+                    <option value="female">Females</option>
+                    <option value="male">Males</option>
                   </select>
                 </div>
 
@@ -2774,20 +2892,16 @@ export default function EventClient({
 
                 <button
                   onClick={handleRequestUshers}
-                  className="w-full rounded-xl bg-violet-600 py-3 text-xs font-bold text-white hover:bg-violet-500 transition shadow-lg shadow-violet-600/20"
+                  disabled={requestingUshers}
+                  className="w-full rounded-xl bg-violet-600 py-3 text-xs font-bold text-white hover:bg-violet-500 transition shadow-lg shadow-violet-600/20 disabled:opacity-50"
                 >
-                  Send Staffing Inquiry
+                  {requestingUshers ? "Submitting to Admin..." : "Submit Staffing Request"}
                 </button>
 
                 <div className="flex items-start gap-2 p-3 rounded-xl bg-white/5 border border-white/10">
-                  <Mail className="h-4 w-4 text-white/40 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-white/40 leading-relaxed">
-                    Your request will be sent to{" "}
-                    <strong className="text-white/60">
-                      thesceneappsupport@gmail.com
-                    </strong>
-                    . The team will review your inquiry and respond with
-                    availability, pricing confirmation, and next steps.
+                  <PhoneCall className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-white/50 leading-relaxed">
+                    This request goes directly to the <strong className="text-white font-semibold">TheScene Operations team</strong>. We&apos;ll review and reach out to you directly as soon as possible.
                   </p>
                 </div>
               </div>
@@ -2975,22 +3089,17 @@ export default function EventClient({
                 <button
                   onClick={handlePlaceWristbandOrder}
                   disabled={placingWristbandOrder}
-                  className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3 text-xs font-bold text-white hover:from-violet-500 hover:to-fuchsia-500 transition shadow-lg shadow-violet-600/20"
+                  className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3 text-xs font-bold text-white hover:from-violet-500 hover:to-fuchsia-500 transition shadow-lg shadow-violet-600/20 disabled:opacity-50"
                 >
                   {placingWristbandOrder
-                    ? "Sending Inquiry..."
-                    : "Send Inquiry to TheScene"}
+                    ? "Submitting Order..."
+                    : "Submit Wristband Order to TheScene"}
                 </button>
 
                 <div className="flex items-start gap-2 p-3 rounded-xl bg-white/5 border border-white/10">
-                  <Mail className="h-4 w-4 text-white/40 shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-white/40 leading-relaxed">
-                    Your inquiry is sent to{" "}
-                    <strong className="text-white/60">
-                      thesceneappsupport@gmail.com
-                    </strong>
-                    . Our team will respond with a design mockup, final pricing,
-                    and delivery timeline.
+                  <PhoneCall className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-white/50 leading-relaxed">
+                    This order goes directly to the <strong className="text-white font-semibold">TheScene Operations team</strong>. We&apos;ll review and contact you directly with the design mockup and delivery timeline.
                   </p>
                 </div>
               </div>
@@ -3072,7 +3181,7 @@ export default function EventClient({
                     <Music className="h-4 w-4 text-violet-400" /> Music Genres
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {AVAILABLE_GENRES.map((g) => {
+                    {Array.from(new Set([...AVAILABLE_GENRES, ...settingsGenres])).map((g) => {
                       const active = settingsGenres.includes(g);
                       return (
                         <button
@@ -3103,7 +3212,7 @@ export default function EventClient({
                     <Flame className="h-4 w-4 text-fuchsia-400" /> Event Vibe
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {AVAILABLE_VIBES.map((v) => {
+                    {Array.from(new Set([...AVAILABLE_VIBES, ...settingsVibes])).map((v) => {
                       const active = settingsVibes.includes(v);
                       return (
                         <button
@@ -3175,6 +3284,7 @@ export default function EventClient({
                 </div>
               </div>
 
+{/* CUSTOM REGISTRATION BUILDER — commented out until fully wired to DB
               <div className="rounded-2xl border border-white/10 bg-[#0e0e11] p-6 shadow-xl">
                 <h3 className="text-sm font-bold text-white mb-1">
                   Custom Registration Questions
@@ -3185,6 +3295,7 @@ export default function EventClient({
                 </p>
                 <CustomRegistrationBuilder />
               </div>
+*/}
 
               <button
                 onClick={handleSaveSettings}

@@ -1,6 +1,5 @@
-"use client";
-
 import Link from "next/link";
+import Image from "next/image";
 import LandingNav from "@/components/LandingNav";
 import {
   ArrowRight,
@@ -13,20 +12,57 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+export const dynamic = "force-static";
+
+/* ── JSON-LD Structured Data for Google Search Rich Results ── */
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://thesceneapp.online/#organization",
+      "name": "TheScene",
+      "url": "https://thesceneapp.online",
+      "logo": "https://bhind.thesceneapp.online/thescenne-logo.png",
+      "sameAs": [
+        "https://instagram.com/thesceneapp",
+        "https://twitter.com/thesceneapp"
+      ]
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://bhind.thesceneapp.online/#software",
+      "name": "Bhind Host Console",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://bhind.thesceneapp.online",
+      "description": "The premier event management, ticketing, and revenue settlement platform for nightlife organizers and concert promoters.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "NGN"
+      },
+      "publisher": {
+        "@id": "https://thesceneapp.online/#organization"
+      }
+    }
+  ]
+};
+
 /* ── discovery showcase section: Bhind events surface on TheScene ── */
 function DiscoverSection() {
   const flyers = [
     {
       name: "Squirt N Splash",
       date: "Mar 22 – 23, 7PM",
-      img: "squirtNsplash.jpeg",
+      img: "/squirtNsplash.webp",
       rotate: "-rotate-6",
       hoverRotate: "hover:-rotate-2",
     },
     {
       name: "Opening Statement",
       date: "sept 5 · 5:00 PM",
-      img: "/opening-statement.jpeg",
+      img: "/opening-statement.webp",
       rotate: "rotate-3",
       hoverRotate: "hover:rotate-1",
     },
@@ -34,8 +70,15 @@ function DiscoverSection() {
 
   return (
     <section className="relative py-28 bg-[#050505] overflow-hidden">
+      {/* Hardware-accelerated ambient glow without heavy blur filters */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute right-0 top-1/4 w-[500px] h-[500px] bg-violet-900/10 rounded-full blur-[130px]" />
+        <div
+          className="absolute right-0 top-1/4 w-[500px] h-[500px] rounded-full opacity-30"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(109, 40, 217, 0.35) 0%, rgba(5, 5, 5, 0) 70%)",
+          }}
+        />
       </div>
 
       <div className="mx-auto max-w-7xl px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
@@ -43,9 +86,11 @@ function DiscoverSection() {
         <div>
           <div className="inline-flex items-center gap-2.5 text-sm sm:text-base font-semibold text-white/70 mb-8">
             <span className="text-white/60">Synced with</span>
-            <img
-              src="/thescenne-logo-transparent.png"
+            <Image
+              src="/thescenne-logo-transparent.webp"
               alt="TheScene"
+              width={100}
+              height={24}
               className="h-5 sm:h-6 w-auto object-contain brightness-125 inline-block"
             />
           </div>
@@ -84,13 +129,15 @@ function DiscoverSection() {
           <div
             className={`group absolute left-0 top-8 w-40 md:w-60 z-30 ${flyers[0].rotate} ${flyers[0].hoverRotate} hover:-translate-y-2 hover:scale-105 transition-all duration-300 ease-out rounded-[1.75rem] bg-[#111113] border border-white/10 p-2 shadow-2xl shadow-black/60 hover:shadow-violet-500/20 cursor-pointer`}
           >
-            <div
-              className="h-40 md:h-52 w-full rounded-[1.4rem] bg-cover bg-center bg-white/10 overflow-hidden relative"
-              style={{
-                backgroundImage: `url('${flyers[0].img}')`,
-              }}
-            >
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+            <div className="h-40 md:h-52 w-full rounded-[1.4rem] bg-white/10 overflow-hidden relative">
+              <Image
+                src={flyers[0].img}
+                alt={flyers[0].name}
+                fill
+                sizes="(max-width: 768px) 160px, 240px"
+                className="object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 z-10" />
             </div>
             <div className="px-2 pt-3 pb-2">
               <div className="text-xs font-bold text-white truncate">
@@ -106,13 +153,15 @@ function DiscoverSection() {
           <div
             className={`group absolute right-0 bottom-10 w-40 md:w-60 z-30 ${flyers[1].rotate} ${flyers[1].hoverRotate} hover:-translate-y-2 hover:scale-105 transition-all duration-300 ease-out rounded-[1.75rem] bg-[#111113] border border-white/10 p-2 shadow-2xl shadow-black/60 hover:shadow-violet-500/20 cursor-pointer`}
           >
-            <div
-              className="h-40 md:h-44 w-full rounded-[1.2rem] bg-cover bg-center bg-white/10 overflow-hidden relative"
-              style={{
-                backgroundImage: `url('${flyers[1].img}')`,
-              }}
-            >
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+            <div className="h-40 md:h-44 w-full rounded-[1.2rem] bg-white/10 overflow-hidden relative">
+              <Image
+                src={flyers[1].img}
+                alt={flyers[1].name}
+                fill
+                sizes="(max-width: 768px) 160px, 240px"
+                className="object-cover transition-transform duration-300 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300 z-10" />
             </div>
             <div className="px-2 pt-3 pb-2">
               <div className="text-xs font-bold text-white truncate">
@@ -139,11 +188,13 @@ function DiscoverSection() {
                   {/* dynamic island */}
                   <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-24 h-6 rounded-full bg-black z-20" />
 
-                  {/* ── your full screenshot goes here ── */}
-                  <img
-                    src="/IMG_4070.png"
+                  {/* ── optimized screenshot ── */}
+                  <Image
+                    src="/IMG_4070.webp"
                     alt="TheScene app screenshot"
-                    className="w-full h-full object-cover"
+                    fill
+                    sizes="260px"
+                    className="object-cover"
                   />
                 </div>
               </div>
@@ -164,20 +215,36 @@ function DiscoverSection() {
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#08090A] text-[#F9FAFB] font-body selection:bg-violet-500/30 overflow-x-hidden">
+      {/* Schema.org Structured Data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <LandingNav />
 
       {/* ── HERO ── */}
       <section className="relative flex flex-col items-center justify-center pt-48 pb-20 overflow-hidden">
+        {/* Hardware-accelerated glow */}
         <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute left-1/2 top-0 -translate-x-1/2 w-[600px] h-[500px] bg-violet-900/10 rounded-full blur-[120px]" />
+          <div
+            className="absolute left-1/2 top-0 -translate-x-1/2 w-[600px] h-[500px] rounded-full opacity-35"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(109, 40, 217, 0.4) 0%, rgba(8, 9, 10, 0) 70%)",
+            }}
+          />
         </div>
 
         <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center flex flex-col items-center">
           <div className="inline-flex items-center gap-2.5 text-sm sm:text-base font-semibold text-white/70 mb-8">
             <span className="text-white/60">Built for</span>
-            <img
-              src="/thescenne-logo-transparent.png"
+            <Image
+              src="/thescenne-logo-transparent.webp"
               alt="TheScene"
+              width={120}
+              height={28}
+              priority
               className="h-6 sm:h-7 w-auto object-contain brightness-125 inline-block"
             />
           </div>
@@ -290,9 +357,11 @@ export default function LandingPage() {
             </span>
             <div className="text-white/40 text-xs flex items-center gap-1.5 border-l border-white/10 pl-3">
               <span>Powered by</span>
-              <img
-                src="/thescenne-logo-transparent.png"
+              <Image
+                src="/thescenne-logo-transparent.webp"
                 alt="TheScene"
+                width={80}
+                height={20}
                 className="h-4 w-auto object-contain brightness-125 opacity-80 inline-block"
               />
             </div>
