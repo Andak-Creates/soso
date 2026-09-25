@@ -28,16 +28,16 @@ export async function POST(request: NextRequest) {
       channels: ["card", "bank", "ussd", "mobile_money"],
     };
 
-    // Attach subaccount split if host has an active payout subaccount
-    if (subaccount && typeof subaccount === "string" && subaccount.startsWith("ACCT_")) {
-      payload.subaccount = subaccount;
-      if (bearer === "account" || bearer === "subaccount") {
-        payload.bearer = bearer;
-      }
-      if (transaction_charge && Number.isInteger(transaction_charge)) {
-        payload.transaction_charge = transaction_charge;
-      }
-    }
+    // Subaccount split paused — all payments route directly to platform account for escrow and verified withdrawal payouts
+    // if (subaccount && typeof subaccount === "string" && subaccount.startsWith("ACCT_")) {
+    //   payload.subaccount = subaccount;
+    //   if (bearer === "account" || bearer === "subaccount") {
+    //     payload.bearer = bearer;
+    //   }
+    //   if (transaction_charge && Number.isInteger(transaction_charge)) {
+    //     payload.transaction_charge = transaction_charge;
+    //   }
+    // }
 
     const response = await fetch(
       "https://api.paystack.co/transaction/initialize",

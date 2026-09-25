@@ -220,7 +220,7 @@ export default function GlobalHostHub({
                 {formatMoney(pendingPayout)}
               </div>
               <div className="text-[11px] font-medium text-amber-400/80 mt-1">
-                Daily Paystack settlement (T+1)
+                Available for Bank Payout
               </div>
             </div>
 

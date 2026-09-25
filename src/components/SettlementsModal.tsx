@@ -189,15 +189,15 @@ export default function SettlementsModal({
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-amber-400/80 uppercase tracking-wider">
-                  Pending Settlement
+                  Available Balance
                 </span>
                 <Clock className="h-3.5 w-3.5 text-amber-400" />
               </div>
               <div className="text-xl font-heading font-black text-amber-300 mt-1">
-                {formatMoney(pendingPayout)}
+                {formatMoney(currentBalance)}
               </div>
               <div className="text-[10px] font-medium text-amber-400/70 mt-1">
-                Settles tomorrow morning (T+1)
+                Ready for bank withdrawal
               </div>
             </div>
           </div>
@@ -220,13 +220,28 @@ export default function SettlementsModal({
                   Edit Bank Details
                 </button>
               )}
+              <button
+                type="button"
+                onClick={handleRequestWithdrawal}
+                disabled={withdrawing || currentBalance <= 0}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 transition shadow-lg shadow-emerald-700/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {withdrawing ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Requesting...
+                  </>
+                ) : (
+                  "Request Payout"
+                )}
+              </button>
             </div>
           </div>
 
           {/* Fee & Payout Terms Info */}
           <div className="p-4 rounded-2xl border border-violet-500/20 bg-violet-500/5 text-xs text-violet-200/90 leading-relaxed space-y-2">
             <div className="flex items-center gap-2 font-bold text-white text-xs">
-              <span className="text-violet-400">💡</span> Automated Payout & Fee Structure
+              <span className="text-violet-400">💡</span> Payout & Fee Structure
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] pt-1">
               <div className="rounded-xl bg-white/5 p-2.5 border border-white/5">
@@ -238,12 +253,12 @@ export default function SettlementsModal({
                 <span className="font-bold text-white/80">5% service fee</span>
               </div>
               <div className="rounded-xl bg-white/5 p-2.5 border border-white/5">
-                <span className="text-white/40 block text-[10px] uppercase font-bold">Settlement Schedule</span>
-                <span className="font-bold text-amber-300">Daily Morning (T+1)</span>
+                <span className="text-white/40 block text-[10px] uppercase font-bold">Payout Mode</span>
+                <span className="font-bold text-amber-300">Direct Bank Transfer</span>
               </div>
             </div>
             <p className="text-[11px] text-white/50 pt-1">
-              * Standard Paystack payment gateway processing fees (1.5%) apply to final settlement into your Nigerian bank account.
+              * Event payouts are verified and transferred directly to your saved Nigerian bank account upon withdrawal request.
             </p>
           </div>
 

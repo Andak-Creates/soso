@@ -217,6 +217,7 @@ export async function POST(request: NextRequest) {
           .from("host_balances")
           .update({
             total_earned: (Number(balance.total_earned) || 0) + hostEarnings,
+            current_balance: (Number(balance.current_balance) || 0) + hostEarnings,
             pending_payout: (Number(balance.pending_payout) || 0) + hostEarnings,
             updated_at: new Date().toISOString(),
           })
@@ -225,8 +226,8 @@ export async function POST(request: NextRequest) {
         await supabase.from("host_balances").insert({
           user_id: hostId,
           total_earned: hostEarnings,
+          current_balance: hostEarnings,
           pending_payout: hostEarnings,
-          available_balance: 0,
           total_withdrawn: 0,
           currency: party.currency_code || "NGN",
         });
